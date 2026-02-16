@@ -18,7 +18,7 @@ function printHelp() {
     site-to-md --help             Show this help
 
   Options:
-    --out <dir>         Output directory (default: ./site-to-md-output)
+    --out <dir>         Output directory (default: ./<hostname>)
     --title <name>      Site title for llms.txt header
     --desc <text>       Site description for llms.txt
     --include <glob>    Include only matching paths (repeatable)

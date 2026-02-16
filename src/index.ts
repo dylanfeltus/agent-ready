@@ -25,7 +25,15 @@ function walkDir(dir: string): string[] {
 
 /** Main function — crawl/read + extract + generate */
 export async function agentReady(config: AgentReadyConfig): Promise<GenerateResult> {
-  const outDir = resolve(config.outDir || "./agent-ready-output");
+  // Default output dir: use URL hostname if available, otherwise generic
+  let defaultOut = "./site-to-md-output";
+  if (config.url) {
+    try {
+      const hostname = new URL(config.url).hostname.replace(/^www\./, "");
+      defaultOut = `./${hostname}`;
+    } catch { /* fall back to default */ }
+  }
+  const outDir = resolve(config.outDir || defaultOut);
   const pages: PageResult[] = [];
 
   if (config.url) {

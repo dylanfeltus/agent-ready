@@ -1,0 +1,100 @@
+# updates.page — The changelog your users will actually read
+
+AI-powered changelog platform
+
+Beautiful changelogs on your own domain.
+
+Pro plans from $19/mo
+
+How it works
+
+## Write. Publish. Done.
+
+01
+
+### Write your update
+
+Markdown editor with live preview. Draft, schedule, or publish instantly. Or let AI write it for you.
+
+02
+
+### Publish everywhere
+
+One click sends your update to your hosted page, embed widget, email subscribers, and RSS. Everywhere at once.
+
+03
+
+### Own your brand
+
+Your domain. Your logo. Your colors. Automatic SSL. Zero "powered by" badges.
+
+Features
+
+## Thoughtfully simple
+
+Every feature earns its place. No bloat, no feature-gating games.
+
+### Custom domains
+
+Your changelog lives at changelog.yourcompany.com. SSL certificates handle themselves.
+
+### Embeddable widget
+
+One script tag. A clean widget slides out inside your product. Matches your brand automatically.
+
+### Scheduled publishing
+
+Write now, publish when the time is right.
+
+### Categories
+
+Organize updates as New, Improved, Fixed, or custom tags.
+
+### RSS feed
+
+Standard RSS for users who prefer feed readers.
+
+### Markdown editor
+
+Write in markdown with images, code blocks, and more.
+
+### API & CLI
+
+Publish from your terminal, your CI/CD pipeline, or let your AI agents ship updates while you sleep.
+
+Embed widget
+
+## Updates inside  
+your product
+
+One line of code. A clean widget slides out when your users click "What's New." Fully customizable, always on-brand.
+
+`<script src="updates.page/embed.js"></script>`
+
+Pricing
+
+## Simple, honest pricing
+
+No usage-based fees. No surprises.
+
+For developers
+
+## Ship from anywhere
+
+Publish from your CI/CD pipeline, your terminal, or hand it to your AI agents. The Business plan includes Claude-powered writing and a full CLI.
+
+-   REST API with full programmatic control
+-   CLI for terminal-native workflows
+-   Webhooks for real-time notifications
+-   AI writing with Claude Opus (Business plan)
+
+## No MAUs. No per-seat gotchas.  
+No pricing page anxiety.
+
+You know exactly what you'll pay. Every plan includes unlimited changelog entries and unlimited readers.
+
+## Your users deserve better release notes
+
+Start free. Upgrade when you're ready. No credit card, no sales calls.
+
+[Get Started Free](https://app.updates.page/signup)

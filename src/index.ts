@@ -30,7 +30,7 @@ export async function agentReady(config: AgentReadyConfig): Promise<GenerateResu
   if (config.url) {
     try {
       const hostname = new URL(config.url).hostname.replace(/^www\./, "");
-      defaultOut = `./${hostname}`;
+      defaultOut = `./${hostname}-md`;
     } catch { /* fall back to default */ }
   }
   const outDir = resolve(config.outDir || defaultOut);

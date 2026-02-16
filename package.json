@@ -31,11 +31,15 @@
     "seo",
     "aeo"
   ],
-  "author": "Stratus Labs",
+  "author": "Dylan Feltus <dylan@stratuslabs.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stratuslabs/agent-ready"
+    "url": "https://github.com/dylanfeltus/agent-ready"
+  },
+  "homepage": "https://github.com/dylanfeltus/agent-ready#readme",
+  "bugs": {
+    "url": "https://github.com/dylanfeltus/agent-ready/issues"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",

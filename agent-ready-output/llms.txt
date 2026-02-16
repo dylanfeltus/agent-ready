@@ -1,6 +1,0 @@
-# Website
-
-> Custom domain. Auto-SSL. Embeddable widget. Beautiful hosted pages. The developer-friendly changelog platform from $19/mo.
-
-- [updates.page — The changelog your users will actually read](/index.html.md): Custom domain. Auto-SSL. Embeddable widget. Beautiful hosted pages. The developer-friendly changelog platform from $19/mo.
-- [updates.page — The changelog your users will actually read](/pricing.html.md): Custom domain. Auto-SSL. Embeddable widget. Beautiful hosted pages. The developer-friendly changelog platform from $19/mo.

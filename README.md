@@ -170,9 +170,15 @@ Clean markdown extracted from each page — no nav, footer, ads, or scripts.
 
 All page content concatenated in a single file for one-shot ingestion by AI agents.
 
-## Why?
+## What is llms.txt?
 
-AI agents are the new web crawlers. Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. This tool lets any site generate one automatically.
+[llms.txt](https://llmstxt.org) is a proposed standard (by Jeremy Howard) for making websites readable by AI agents. Think of it like `robots.txt` but for LLMs:
+
+- **`/llms.txt`** — A markdown index file listing your site's key pages with descriptions. AI agents read this first to understand what's on your site.
+- **`*.html.md`** — Clean markdown versions of each page (same URL + `.md`). No nav, no footer, no JavaScript — just the content.
+- **`/llms-ctx.txt`** — All content concatenated in one file for single-prompt ingestion.
+
+Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. `agent-ready` generates yours automatically.
 
 ## License
 

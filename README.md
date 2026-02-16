@@ -1,4 +1,4 @@
-# agent-ready 🤖
+# site-to-md 🤖
 
 Make any website AI-agent-readable. Generates `/llms.txt` + clean markdown for every page.
 
@@ -7,13 +7,13 @@ Make any website AI-agent-readable. Generates `/llms.txt` + clean markdown for e
 ## Quick Start
 
 ```bash
-npx agent-ready https://mysite.com
+npx site-to-md https://mysite.com
 ```
 
 That's it. Zero config. You'll get:
 
 ```
-agent-ready-output/
+site-to-md-output/
 ├── llms.txt           # Index file per llmstxt.org spec
 ├── llms-ctx.txt       # All content inline (for single-prompt ingestion)
 ├── index.html.md      # Homepage as markdown
@@ -38,45 +38,45 @@ agent-ready-output/
 
 ```bash
 # Use directly with npx (no install needed)
-npx agent-ready https://mysite.com
+npx site-to-md https://mysite.com
 
 # Or install globally
-npm install -g agent-ready
+npm install -g site-to-md
 
 # Or as a project dependency
-npm install agent-ready
+npm install site-to-md
 ```
 
 ## CLI Usage
 
 ```bash
 # Crawl a live website
-agent-ready https://docs.mysite.com
+site-to-md https://docs.mysite.com
 
 # Process local build output
-agent-ready ./dist
+site-to-md ./dist
 
 # Customize output
-agent-ready https://mysite.com \
+site-to-md https://mysite.com \
   --out ./public \
   --title "My Product" \
   --desc "Developer documentation for My Product"
 
 # Filter pages
-agent-ready https://mysite.com \
+site-to-md https://mysite.com \
   --include "/docs/**" \
   --include "/blog/**" \
   --exclude "/admin/**"
 
 # Skip context file
-agent-ready https://mysite.com --no-ctx
+site-to-md https://mysite.com --no-ctx
 ```
 
 ### Options
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--out <dir>` | Output directory | `./agent-ready-output` |
+| `--out <dir>` | Output directory | `./site-to-md-output` |
 | `--title <name>` | Site title for llms.txt | Auto-detected |
 | `--desc <text>` | Site description | Auto-detected |
 | `--include <glob>` | Include only matching paths (repeatable) | All |
@@ -91,7 +91,7 @@ agent-ready https://mysite.com --no-ctx
 ## Programmatic API
 
 ```js
-import { agentReady } from 'agent-ready';
+import { agentReady } from 'site-to-md';
 
 const result = await agentReady({
   url: 'https://mysite.com',
@@ -107,7 +107,7 @@ console.log(result.llmsTxt); // Contents of llms.txt
 
 ## Config File
 
-Create `agent-ready.config.js` in your project root:
+Create `site-to-md.config.js` in your project root:
 
 ```js
 export default {
@@ -136,7 +136,7 @@ export default {
 ```json
 {
   "scripts": {
-    "build": "next build && agent-ready ./out --out ./out"
+    "build": "next build && site-to-md ./out --out ./out"
   }
 }
 ```
@@ -178,7 +178,7 @@ All page content concatenated in a single file for one-shot ingestion by AI agen
 - **`*.html.md`** — Clean markdown versions of each page (same URL + `.md`). No nav, no footer, no JavaScript — just the content.
 - **`/llms-ctx.txt`** — All content concatenated in one file for single-prompt ingestion.
 
-Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. `agent-ready` generates yours automatically.
+Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. `site-to-md` generates yours automatically.
 
 ## License
 

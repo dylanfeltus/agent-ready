@@ -9,16 +9,16 @@ const VERSION = "0.1.0";
 
 function printHelp() {
   console.log(`
-  agent-ready v${VERSION}
+  site-to-md v${VERSION}
   Make any website AI-agent-readable.
 
   Usage:
-    agent-ready <url>              Crawl a website and generate markdown
-    agent-ready <directory>        Process local HTML files
-    agent-ready --help             Show this help
+    site-to-md <url>              Crawl a website and generate markdown
+    site-to-md <directory>        Process local HTML files
+    site-to-md --help             Show this help
 
   Options:
-    --out <dir>         Output directory (default: ./agent-ready-output)
+    --out <dir>         Output directory (default: ./site-to-md-output)
     --title <name>      Site title for llms.txt header
     --desc <text>       Site description for llms.txt
     --include <glob>    Include only matching paths (repeatable)
@@ -33,10 +33,10 @@ function printHelp() {
     --help              Show this help
 
   Examples:
-    npx agent-ready https://docs.mysite.com
-    npx agent-ready ./dist --out ./public
-    npx agent-ready https://mysite.com --include "/docs/**" --include "/blog/**"
-    npx agent-ready https://mysite.com --title "My Product" --desc "Product docs"
+    npx site-to-md https://docs.mysite.com
+    npx site-to-md ./dist --out ./public
+    npx site-to-md https://mysite.com --include "/docs/**" --include "/blog/**"
+    npx site-to-md https://mysite.com --title "My Product" --desc "Product docs"
   `);
 }
 
@@ -88,9 +88,9 @@ async function loadConfigFile(configPath?: string): Promise<Partial<AgentReadyCo
   const paths = configPath
     ? [resolve(configPath)]
     : [
-        resolve("agent-ready.config.js"),
-        resolve("agent-ready.config.mjs"),
-        resolve(".agent-ready.json"),
+        resolve("site-to-md.config.js"),
+        resolve("site-to-md.config.mjs"),
+        resolve(".site-to-md.json"),
       ];
 
   for (const p of paths) {
@@ -154,7 +154,7 @@ async function main() {
   const { default: ora } = await import("ora");
 
   console.log("");
-  console.log(chalk.bold("  🤖 agent-ready"));
+  console.log(chalk.bold("  🤖 site-to-md"));
   console.log(chalk.gray(`  Making ${label} agent-readable...\n`));
 
   const spinner = ora({ text: isUrl ? "Crawling site..." : "Reading HTML files...", indent: 2 }).start();

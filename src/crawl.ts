@@ -3,7 +3,7 @@ import type { AgentReadyConfig } from "./types.js";
 
 const DEFAULT_CONCURRENCY = 5;
 const DEFAULT_MAX_DEPTH = 3;
-const DEFAULT_UA = "AgentReady/0.1 (+https://github.com/stratuslabs/agent-ready)";
+const DEFAULT_UA = "AgentReady/0.1 (+https://github.com/dylanfeltus/agent-ready)";
 
 interface CrawlResult {
   url: string;

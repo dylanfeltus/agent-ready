@@ -25,18 +25,14 @@ mysite.com-md/
     └── release-notes.html.md
 ```
 
-### Why `.html.md`?
-
-It looks like a mistake, but it is the [llmstxt.org](https://llmstxt.org) convention: the markdown mirror of a page lives at that page's own URL with `.md`
-appended. `/pricing.html` gets `/pricing.html.md`, so an agent that knows a page's URL can find its clean version by appending one extension — no index lookup, no
-guessing. Pages served without an extension still get `.html.md`, keeping one predictable rule across the whole site.
+The doubled extension in `.html.md` is intentional — it's the [llmstxt.org](https://llmstxt.org) convention. A page's markdown mirror lives at that page's own URL with `.md` appended, so an agent that knows a URL can find its clean version without an index lookup.
 
 ## What It Does
 
 1. **Crawls your site** — follows links or uses `sitemap.xml` if available
 2. **Extracts content** — strips nav, footer, ads, scripts using [Mozilla Readability](https://github.com/mozilla/readability) (same as Firefox Reader View)
-3. **Converts to markdown** — clean, structured markdown via [Turndown](https://github.com/mixmark-io/turndown), including comparison tables
-4. **Checks its own work** — warns when a page loses content in extraction (see [Content-loss guard](#content-loss-guard))
+3. **Converts to markdown** — via [Turndown](https://github.com/mixmark-io/turndown), including comparison tables and their tick/cross icons
+4. **Checks its own work** — warns when a page loses content in extraction
 5. **Generates `/llms.txt`** — per the [llmstxt.org](https://llmstxt.org) spec
 6. **Generates per-page `.html.md` files** — per the spec convention
 7. **Generates `/llms-ctx.txt`** — all content inline for single-prompt ingestion
@@ -71,7 +67,7 @@ site-to-md --serve "npm start" --out ./public
 # Crawl locally but publish elsewhere
 site-to-md ./out --base-url https://mysite.com
 
-# Audit what an agent can actually read — writes nothing
+# Audit what an agent can read — writes nothing
 site-to-md https://mysite.com --report
 
 # Fail the build if anything is lost
@@ -90,12 +86,12 @@ site-to-md ./out --strict
 | `--exclude <glob>` | Exclude matching paths (repeatable) | None |
 | `--no-ctx` | Skip generating llms-ctx.txt | — |
 | `--no-sitemap` | Don't use sitemap.xml for crawling | — |
-| `--sitemap-origin <mode>` | `rewrite`, `strict`, or `follow` — see [Crawling a local server](#crawling-a-local-server) | `rewrite` |
+| `--sitemap-origin <mode>` | `rewrite`, `strict`, or `follow` | `rewrite` |
 | `--max-depth <n>` | Max crawl depth | 3 |
 | `--concurrency <n>` | Parallel requests | 5 |
 | `--strip <selector>` | CSS selectors to strip from extracted content (repeatable) | — |
-| `--strip-source` | Strip before extraction instead of after (pre-0.2 behaviour) | — |
-| `--title-source <s>` | `auto`, `og`, or `title` — see [Page titles](#page-titles) | `auto` |
+| `--strip-source` | Strip before extraction instead of after | — |
+| `--title-source <s>` | `auto`, `og`, or `title` | `auto` |
 | `--serve <command>` | Start a server, crawl it, then stop it | — |
 | `--report` | Audit what an agent can read; writes nothing | — |
 | `--strict` | Exit non-zero if anything is flagged (for CI) | — |
@@ -103,48 +99,32 @@ site-to-md ./out --strict
 
 ## Crawling a local server
 
-Static site generators — Next.js, Astro, Nuxt and Hugo among them — write **absolute production URLs** into `sitemap.xml`. Following those verbatim means
-`site-to-md http://localhost:3000` fetches `https://yoursite.com/...` and mirrors **production**, producing well-formed output that describes a build other than the
-one in front of you.
+```bash
+site-to-md --serve "npm start" --out ./public
+```
 
-By default, sitemap URLs on a different origin are rewritten onto the origin being crawled, and the rewrite is reported:
+`--serve` starts the command, waits for it to answer, crawls it, and shuts it down — choosing the port itself and passing it as `PORT` (or substituting `{port}` in the command).
+
+Note that static site generators write **absolute production URLs** into `sitemap.xml`. Left alone, crawling `http://localhost:3000` would fetch and mirror your deployed site instead. Sitemap URLs on another origin are therefore rewritten onto the origin being crawled, and the rewrite is reported:
 
 ```
 • Rewrote 12 sitemap URLs from https://mysite.com to http://localhost:3000
 ```
 
-Use `--sitemap-origin strict` to refuse and exit non-zero instead, or `--sitemap-origin follow` for the pre-0.2 behaviour.
+Use `--sitemap-origin strict` to refuse and exit non-zero instead, or `follow` to fetch them as listed.
 
-### `--serve`
+## Diagnostics
 
-`--serve` handles the boot/wait/crawl/teardown cycle:
-
-```bash
-site-to-md --serve "npm start" --out ./public
-```
-
-Two details matter, and both are handled for you:
-
-- **The port is reserved before the command starts** and passed via `PORT` (and by substituting `{port}` in the command). Many dev servers — `next start` among
-  them — do not fail on a busy port; they print a notice and quietly move to the next one, leaving you crawling whatever was already listening.
-- **The whole process group is terminated** on teardown. `next start` forks, so killing only the spawned process leaves the real server holding the port and the
-  next run reads a stale build.
-
-## Content-loss guard
-
-The failure mode this tool has to defend against is not crashing — it is producing a convincing document that is wrong. Every page is measured before and after
-extraction, and any collapse is reported:
+Every page is measured before and after extraction, and any collapse is reported:
 
 ```
 ⚠ /pricing — output is 8% of source text (4210 → 337 chars); 4 headings lost, 1 table lost
-⚠ /pricing — 8 icons could not be read as included/excluded
+⚠ /pricing — 3 icons could not be read as included/excluded
 ```
 
 Add `--strict` to turn any finding into a non-zero exit, which makes the tool safe to run in CI where committed output belongs.
 
-### `--report`
-
-The same checks, rendered as an audit. It crawls and writes nothing:
+`--report` renders the same checks as an audit, crawling without writing anything:
 
 ```
 $ site-to-md https://mysite.com --report
@@ -158,37 +138,9 @@ $ site-to-md https://mysite.com --report
   ✓ 12 pages extracted cleanly
 ```
 
-## Comparison tables
+### Page titles
 
-Pricing pages and feature matrices are the content most likely to be read by an agent acting on your behalf, and the easiest to lose silently. Two things are
-handled explicitly:
-
-- **Tables are emitted as markdown tables.** Turndown has no table support of its own, so a preserved HTML table would otherwise be flattened into a vertical run
-  of text with every row and column boundary gone.
-- **Icon-only cells keep their meaning.** A cell whose only content is a tick or cross `<svg>` produces no text, which erases the meaning of a row while leaving its
-  label intact — that is how a Free plan comes to look like it includes everything. Icons are resolved to `✓` / `—` from `aria-label`, `title`, `alt`, `<use href>`,
-  or class names.
-
-An icon with no readable signal is reported rather than guessed:
-
-```
-⚠ /pricing — 3 icons could not be read as included/excluded
-    Give each icon an aria-label, title, or alt so its meaning survives conversion.
-```
-
-## Page titles
-
-Readability prefers `og:title` and falls back to `<title>` only when no metadata title exists at all. A single site-wide `og:title` in a root layout — common in the
-Next.js App Router, where a child page must redeclare the whole `openGraph` object to override it — therefore gives **every page the same name**, producing a
-correct-looking but useless index.
-
-By default (`--title-source auto`) this is detected and repaired from each page's own `<title>`, and the repair is reported:
-
-```
-• 4 pages shared one og:title; used each page's <title> instead
-```
-
-Force either source with `--title-source og` or `--title-source title`.
+Readability prefers `og:title` over `<title>`, so a single site-wide `og:title` gives every page the same name in `llms.txt`. This is detected and repaired from each page's own `<title>` by default; use `--title-source og` or `title` to force either.
 
 ## Programmatic API
 
@@ -204,7 +156,7 @@ const result = await agentReady({
 });
 
 console.log(`Generated ${result.pages.length} pages`);
-console.log(result.llmsTxt);    // Contents of llms.txt
+console.log(result.llmsTxt);     // Contents of llms.txt
 console.log(result.diagnostics); // Findings from the content-loss guard
 ```
 
@@ -231,7 +183,7 @@ export default {
     'Documentation': '/docs/**',
     'Blog': ['/blog/**', '/changelog/**'],
 
-    // Or literal entries, for things that are not crawled pages at all
+    // Or literal entries, for things that aren't crawled pages at all
     'For agents and developers': [
       {
         title: 'OpenAPI specification',
@@ -301,13 +253,11 @@ Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https:
 
 ## Upgrading to 0.2
 
-Three behaviour changes, all of them fixes for silently wrong output:
+Three behaviour changes, each with a flag restoring the old behaviour:
 
-- **`--strip` now applies after extraction.** Previously user selectors were removed from the source DOM before Readability ran, which could change which node
-  Readability scored as the article — removing one small block could delete the section around it. Selectors now affect only what they match. Pass `--strip-source`
-  for the old behaviour.
-- **Sitemap URLs on another origin are rewritten to the crawl origin** rather than followed. Pass `--sitemap-origin follow` for the old behaviour.
-- **Pages sharing one `og:title` are retitled from their own `<title>`.** Pass `--title-source og` for the old behaviour.
+- `--strip` now applies after extraction, so a selector affects only what it matches (`--strip-source`)
+- Sitemap URLs on another origin are rewritten to the crawl origin (`--sitemap-origin follow`)
+- Pages sharing one `og:title` are retitled from their own `<title>` (`--title-source og`)
 
 ## Development
 

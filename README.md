@@ -31,7 +31,7 @@ The doubled extension in `.html.md` is intentional — it's the [llmstxt.org](ht
 
 1. **Crawls your site** — follows links or uses `sitemap.xml` if available
 2. **Extracts content** — strips nav, footer, ads, scripts using [Mozilla Readability](https://github.com/mozilla/readability) (same as Firefox Reader View)
-3. **Converts to markdown** — via [Turndown](https://github.com/mixmark-io/turndown), including comparison tables and their tick/cross icons
+3. **Converts to markdown** — via [Turndown](https://github.com/mixmark-io/turndown)
 4. **Checks its own work** — warns when a page loses content in extraction
 5. **Generates `/llms.txt`** — per the [llmstxt.org](https://llmstxt.org) spec
 6. **Generates per-page `.html.md` files** — per the spec convention
@@ -250,14 +250,6 @@ All page content concatenated in a single file for one-shot ingestion by AI agen
 - **`/llms-ctx.txt`** — All content concatenated in one file for single-prompt ingestion.
 
 Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. `site-to-md` generates yours automatically.
-
-## Upgrading to 0.2
-
-Three behaviour changes, each with a flag restoring the old behaviour:
-
-- `--strip` now applies after extraction, so a selector affects only what it matches (`--strip-source`)
-- Sitemap URLs on another origin are rewritten to the crawl origin (`--sitemap-origin follow`)
-- Pages sharing one `og:title` are retitled from their own `<title>` (`--title-source og`)
 
 ## Development
 

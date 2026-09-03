@@ -154,6 +154,11 @@ export function resolveIcons(root: Element | Document): number {
   return lost;
 }
 
+/** Collapse content onto one line, without escaping table delimiters. */
+function oneLine(md: string): string {
+  return md.replace(/\r?\n+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Collapse cell content onto one line and escape markdown table delimiters. */
 function cellText(md: string): string {
   return md
@@ -231,6 +236,12 @@ function renderTable(table: Element): string | null {
   const rows = Array.from(table.querySelectorAll("tr"));
   if (rows.length === 0) return null;
 
+  // Markdown has no caption syntax, so it becomes a line above the table.
+  // Dropping it would lose the table's title without changing the table count
+  // the structural diagnostics watch, so nothing would notice.
+  const captionEl = table.querySelector("caption");
+  const caption = captionEl ? oneLine(cellRenderer.turndown(captionEl.innerHTML)) : "";
+
   const grid: string[][] = [];
   // Tracks which grid rows are entirely <th>, to tell a column-header row from
   // row labels. A matrix like `<tr><th>Feature</th><td>Yes</td></tr>` uses <th>
@@ -266,9 +277,11 @@ function renderTable(table: Element): string | null {
   const header = hasHeader ? grid.shift()! : new Array(width).fill("");
   if (grid.length === 0) return null;
 
-  return [
+  const rendered = [
     `| ${header.join(" | ")} |`,
     `| ${new Array(width).fill("---").join(" | ")} |`,
     ...grid.map((r) => `| ${r.join(" | ")} |`),
   ].join("\n");
+
+  return caption ? `${caption}\n\n${rendered}` : rendered;
 }

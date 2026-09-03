@@ -1,5 +1,6 @@
 import { JSDOM } from "jsdom";
 import type { Diagnostics } from "./diagnostics.js";
+import { matchesAnyGlob } from "./glob.js";
 import type { AgentReadyConfig } from "./types.js";
 
 const DEFAULT_CONCURRENCY = 5;
@@ -46,7 +47,8 @@ async function fetchPage(url: string): Promise<string> {
 /** Parse sitemap.xml and return list of URLs, as listed. */
 async function parseSitemap(
   baseUrl: string,
-  mode: AgentReadyConfig["sitemapOrigin"]
+  mode: AgentReadyConfig["sitemapOrigin"],
+  diagnostics?: Diagnostics
 ): Promise<string[]> {
   const urls: string[] = [];
   const sitemapUrls = [
@@ -62,8 +64,29 @@ async function parseSitemap(
       const childSitemaps = [...indexMatches].map((m) => m[1].trim());
 
       if (childSitemaps.length > 0) {
-        // Recurse into child sitemaps. A sitemap index on a local server also
-        // lists production URLs, so reach the child through the crawl origin —
+        // A sitemap index on a local server lists production URLs for its
+        // children too. Validate their origins BEFORE rewriting or fetching:
+        // otherwise strict mode rewrites the reference away, the fetch quietly
+        // 404s, and the run falls back to link crawling having promised to
+        // refuse the foreign sitemap it was just handed.
+        const foreignChildren = childSitemaps.filter((u) => isForeign(u, baseUrl));
+        if (foreignChildren.length > 0) {
+          if (mode === "strict") {
+            throw new ForeignSitemapError(new URL(baseUrl).origin, foreignChildren);
+          }
+          if (mode !== "follow") {
+            diagnostics?.add({
+              level: "info",
+              code: "sitemap-rewritten",
+              message:
+                `Rewrote ${foreignChildren.length} child sitemap reference` +
+                `${foreignChildren.length !== 1 ? "s" : ""} onto ${new URL(baseUrl).origin}`,
+              detail: "The sitemap index lists absolute production URLs.",
+            });
+          }
+        }
+
+        // Recurse into child sitemaps, reaching them through the crawl origin
         // unless the caller explicitly asked to follow the sitemap as written.
         for (const childUrl of childSitemaps) {
           const target =
@@ -81,10 +104,23 @@ async function parseSitemap(
       }
 
       if (urls.length > 0) break; // found a working sitemap
-    } catch { /* try next */ }
+    } catch (err) {
+      // A deliberate refusal is an answer, not a reason to try the next path.
+      if (err instanceof ForeignSitemapError) throw err;
+      /* try next */
+    }
   }
 
   return urls;
+}
+
+/** True when a URL sits on a different origin than the crawl. */
+function isForeign(url: string, crawlOrigin: string): boolean {
+  try {
+    return new URL(url).origin !== new URL(crawlOrigin).origin;
+  } catch {
+    return false;
+  }
 }
 
 /** Move a URL onto the crawl origin, preserving path, query and hash. */
@@ -174,17 +210,6 @@ function extractLinks(html: string, baseUrl: string): string[] {
   return [...new Set(links)];
 }
 
-/** Check if URL matches include/exclude patterns */
-function matchesPatterns(pathname: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    // Convert glob-like pattern to regex
-    const regex = new RegExp(
-      "^" + pattern.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$"
-    );
-    return regex.test(pathname);
-  });
-}
-
 /** Crawl a website starting from a URL */
 export async function crawlSite(
   config: AgentReadyConfig,
@@ -215,7 +240,7 @@ export async function crawlSite(
   let seedUrls: string[] = [];
   if (config.sitemap !== false) {
     seedUrls = reconcileSitemapUrls(
-      await parseSitemap(baseUrl, sitemapMode),
+      await parseSitemap(baseUrl, sitemapMode, diagnostics),
       baseUrl,
       sitemapMode,
       diagnostics
@@ -242,10 +267,10 @@ export async function crawlSite(
 
     // Apply include/exclude filters
     if (config.include && config.include.length > 0) {
-      if (!matchesPatterns(pathname, config.include)) return;
+      if (!matchesAnyGlob(pathname, config.include)) return;
     }
     if (config.exclude && config.exclude.length > 0) {
-      if (matchesPatterns(pathname, config.exclude)) return;
+      if (matchesAnyGlob(pathname, config.exclude)) return;
     }
 
     try {

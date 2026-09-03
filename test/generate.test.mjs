@@ -175,3 +175,61 @@ test("2.3 a site-relative external entry obeys baseUrl", () => {
   // An absolute entry is already addressable and must pass through untouched.
   assert.match(txt, /\[Offsite\]\(https:\/\/other\.example\/x\)/);
 });
+
+/**
+ * The mirror path has any extension stripped, so building the source line from
+ * it cited /guide for a page actually served at /guide.html.
+ */
+test("2.1 llms-ctx Source keeps the page's real URL, extension and all", () => {
+  const withExt = [
+    {
+      url: "http://localhost:3000/guide.html",
+      path: "/guide",
+      title: "Guide",
+      markdown: "# Guide",
+    },
+  ];
+  const ctx = generateLlmsCtx(withExt, { baseUrl: "https://mysite.com" });
+  assert.match(ctx, /Source: https:\/\/mysite\.com\/guide\.html/);
+  assert.doesNotMatch(ctx, /Source: https:\/\/mysite\.com\/guide\n/);
+  // Never the crawl origin.
+  assert.doesNotMatch(ctx, /localhost/);
+});
+
+test("2.1 llms-ctx Source keeps a query string", () => {
+  const withQuery = [
+    { url: "http://localhost:3000/doc?v=2", path: "/doc", title: "Doc", markdown: "# Doc" },
+  ];
+  const ctx = generateLlmsCtx(withQuery, { baseUrl: "https://mysite.com" });
+  assert.match(ctx, /Source: https:\/\/mysite\.com\/doc\?v=2/);
+});
+
+test("a glob's literal dot cannot match any character", () => {
+  const versioned = [
+    { url: "/", path: "/docs/v1X0/intro", title: "Wrong", markdown: "#" },
+    { url: "/", path: "/docs/v1.0/intro", title: "Right", markdown: "#" },
+  ];
+  const txt = generateLlmsTxt(versioned, { sections: { Docs: "/docs/v1.0/**" } });
+  const section = txt.split("## Docs")[1] || "";
+  assert.match(section, /Right/);
+  assert.doesNotMatch(section, /Wrong/);
+});
+
+test("titles and descriptions cannot break the llms.txt list format", () => {
+  const awkward = [
+    {
+      url: "/",
+      path: "/p",
+      title: "Guide [v2]",
+      markdown: "# Guide",
+      description: "First line.\nSecond line.",
+    },
+  ];
+  const txt = generateLlmsTxt(awkward, {});
+  const entries = txt.split("\n").filter((l) => l.startsWith("- "));
+  assert.equal(entries.length, 1);
+  // The whole description stays on the entry's own line.
+  assert.match(entries[0], /First line\. Second line\./);
+  // Brackets in the title are escaped so the link still parses.
+  assert.match(entries[0], /\\\[v2\\\]/);
+});

@@ -209,3 +209,23 @@ test("1.4 the guard notices when a sparse table is pruned by extraction", async 
     await site.close();
   }
 });
+
+test("two pages writing to one mirror file are reported, not silently merged", async () => {
+  const site = await serveFixtures({
+    "/sitemap.xml": {
+      type: "application/xml",
+      body: productionSitemap(["/guide", "/guide.html"]),
+    },
+    "/guide": { body: page({ title: "Guide", body: "<p>Extensionless guide body.</p>" }) },
+    "/guide.html": { body: page({ title: "Guide", body: "<p>Extensioned guide body.</p>" }) },
+  });
+
+  try {
+    const result = await agentReady({ url: site.origin, report: true });
+    const collisions = result.diagnostics.filter((d) => d.code === "mirror-collision");
+    assert.equal(collisions.length, 1);
+    assert.match(collisions[0].message, /only the last survives/);
+  } finally {
+    await site.close();
+  }
+});

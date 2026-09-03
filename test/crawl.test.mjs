@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { crawlSite, reconcileSitemapUrls, ForeignSitemapError } from "../dist/crawl.js";
 import { Diagnostics } from "../dist/diagnostics.js";
-import { page, productionSitemap, serveFixtures } from "./fixtures.mjs";
+import {
+  page,
+  productionSitemap,
+  productionSitemapIndex,
+  serveFixtures,
+} from "./fixtures.mjs";
 
 /**
  * Acceptance test for §1.2.
@@ -113,6 +118,69 @@ test("1.2 pages that cannot be fetched are reported, not silently dropped", asyn
     const failures = diagnostics.byCode("fetch-failed");
     assert.equal(failures.length, 1);
     assert.match(failures[0].detail, /missing/);
+  } finally {
+    await site.close();
+  }
+});
+
+/**
+ * A sitemap index's children are references that need the same origin check as
+ * its URLs. Rewriting them first meant strict mode silently fell back to link
+ * crawling instead of refusing the foreign sitemap it was handed.
+ */
+test("1.2 strict mode refuses a sitemap index whose children are off-origin", async () => {
+  const site = await serveFixtures({
+    "/sitemap.xml": {
+      type: "application/xml",
+      body: productionSitemapIndex(["/sitemap-pages.xml"]),
+    },
+    "/sitemap-pages.xml": {
+      type: "application/xml",
+      body: productionSitemap(["/", "/pricing"]),
+    },
+    "/": { body: page({ title: "Home", body: "<p>LOCAL BUILD home content.</p>" }) },
+    "/pricing": { body: page({ title: "Pricing", body: "<p>LOCAL BUILD pricing.</p>" }) },
+  });
+
+  try {
+    await assert.rejects(
+      () => crawlSite({ url: site.origin, sitemapOrigin: "strict" }, new Diagnostics()),
+      (err) => {
+        assert.ok(err instanceof ForeignSitemapError);
+        assert.match(err.message, /example\.com/);
+        return true;
+      }
+    );
+  } finally {
+    await site.close();
+  }
+});
+
+test("1.2 a sitemap index with off-origin children is rewritten and crawled", async () => {
+  const site = await serveFixtures({
+    "/sitemap.xml": {
+      type: "application/xml",
+      body: productionSitemapIndex(["/sitemap-pages.xml"]),
+    },
+    "/sitemap-pages.xml": {
+      type: "application/xml",
+      body: productionSitemap(["/", "/pricing"]),
+    },
+    "/": { body: page({ title: "Home", body: "<p>LOCAL BUILD home content.</p>" }) },
+    "/pricing": { body: page({ title: "Pricing", body: "<p>LOCAL BUILD pricing.</p>" }) },
+  });
+
+  try {
+    const diagnostics = new Diagnostics();
+    const results = await crawlSite({ url: site.origin }, diagnostics);
+
+    assert.equal(results.length, 2);
+    for (const r of results) {
+      assert.equal(new URL(r.url).origin, site.origin);
+      assert.match(r.html, /LOCAL BUILD/);
+    }
+    // Both the index reference and the page URLs are reported as rewritten.
+    assert.ok(diagnostics.byCode("sitemap-rewritten").length >= 1);
   } finally {
     await site.close();
   }

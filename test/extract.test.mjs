@@ -285,3 +285,32 @@ test("1.1 a genuine all-th first row is still used as the header", async () => {
   assert.match(markdown, /\| Feature \| Free \|/);
   assert.match(markdown, /\| SSO \| No \|/);
 });
+
+/**
+ * A <caption> is the table's title. Dropping it loses content without changing
+ * the table count, so the structural diagnostics would never notice.
+ */
+test("1.1 a table caption survives conversion", async () => {
+  const { markdown } = await toMarkdown(
+    "<table><caption>Plan comparison, updated January</caption><tbody>" +
+      "<tr><td>SSO</td><td>Yes</td></tr>" +
+      "</tbody></table>"
+  );
+  assert.match(markdown, /Plan comparison, updated January/);
+  assert.match(markdown, /\| SSO \| Yes \|/);
+  // The caption sits above the grid, not inside it.
+  assert.ok(
+    markdown.indexOf("Plan comparison") < markdown.indexOf("| SSO"),
+    "caption should precede the table"
+  );
+});
+
+test("1.1 a caption is not mistaken for a table row", async () => {
+  const { markdown } = await toMarkdown(
+    "<table><caption>Caption text</caption><thead><tr><th>A</th><th>B</th></tr></thead>" +
+      "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>"
+  );
+  assert.match(markdown, /\| A \| B \|/);
+  assert.match(markdown, /\| 1 \| 2 \|/);
+  assert.doesNotMatch(markdown, /\| Caption text \|/);
+});

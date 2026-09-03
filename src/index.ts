@@ -210,6 +210,26 @@ export async function agentReady(config: AgentReadyConfig): Promise<GenerateResu
     );
   }
 
+  // Two source pages can normalise to the same mirror path (/guide.html and
+  // /guide both become /guide.html.md), and the second write would silently
+  // replace the first. Report it rather than losing a page without a word.
+  const byMirror = new Map<string, PageResult[]>();
+  for (const page of pages) {
+    const target = mirrorPath(page);
+    if (!byMirror.has(target)) byMirror.set(target, []);
+    byMirror.get(target)!.push(page);
+  }
+  for (const [target, group] of byMirror) {
+    if (group.length < 2) continue;
+    diagnostics.add({
+      level: "warn",
+      code: "mirror-collision",
+      page: target,
+      message: `${group.length} pages write to ${target}; only the last survives`,
+      detail: group.map((p) => p.url).join(", "),
+    });
+  }
+
   // Content-loss guard, per page.
   for (const page of pages) {
     const report = reports.get(page.path);

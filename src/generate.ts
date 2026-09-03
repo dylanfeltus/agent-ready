@@ -1,3 +1,4 @@
+import { matchesAnyGlob } from "./glob.js";
 import type {
   AgentReadyConfig,
   ExternalEntry,
@@ -27,6 +28,25 @@ export function toEmittedUrl(pathOrUrl: string, baseUrl?: string): string {
   }
 }
 
+/**
+ * The published address of a crawled page.
+ *
+ * Built from the page's real URL rather than its mirror path, because the path
+ * has any extension stripped — a page served at /guide.html would otherwise be
+ * cited as /guide, which may not exist.
+ */
+export function sourceUrl(page: PageResult, baseUrl?: string): string {
+  if (!baseUrl) return page.url;
+  try {
+    const base = new URL(baseUrl);
+    // page.url is absolute for a crawl and site-relative for a directory build.
+    const parsed = new URL(page.url, base);
+    return new URL(parsed.pathname + parsed.search + parsed.hash, base).href;
+  } catch {
+    return page.url;
+  }
+}
+
 function isExternalEntries(spec: SectionSpec): spec is ExternalEntry[] {
   return Array.isArray(spec) && typeof spec[0] === "object";
 }
@@ -37,20 +57,13 @@ function globsOf(spec: SectionSpec): string[] {
   return spec as string[];
 }
 
-function matchesGlob(path: string, pattern: string): boolean {
-  const regex = new RegExp(
-    "^" + pattern.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$"
-  );
-  return regex.test(path);
-}
-
 /** Assign pages to sections based on config or auto-detect from URL structure */
 function assignSections(pages: PageResult[], config: AgentReadyConfig): PageResult[] {
   if (config.sections) {
     const entries = Object.entries(config.sections);
     return pages.map((page) => {
       for (const [name, spec] of entries) {
-        if (globsOf(spec).some((g) => matchesGlob(page.path, g))) {
+        if (matchesAnyGlob(page.path, globsOf(spec))) {
           return { ...page, section: name };
         }
       }
@@ -69,16 +82,28 @@ function assignSections(pages: PageResult[], config: AgentReadyConfig): PageResu
   });
 }
 
+/** Collapse to one line — a stray newline would end the list item early. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Escape brackets so a title like "Guide [v2]" cannot break the link. */
+function linkText(text: string): string {
+  return oneLine(text).replace(/([[\]])/g, "\\$1");
+}
+
 function renderPageLine(page: PageResult, baseUrl?: string): string {
   const href = toEmittedUrl(mirrorPath(page), baseUrl);
-  return `- [${page.title}](${href})${page.description ? `: ${page.description}` : ""}\n`;
+  const desc = page.description ? `: ${oneLine(page.description)}` : "";
+  return `- [${linkText(page.title)}](${href})${desc}\n`;
 }
 
 function renderEntryLine(entry: ExternalEntry, baseUrl?: string): string {
   // A site-relative entry (e.g. /openapi.json) is an emitted URL like any
   // other and must obey baseUrl; an absolute one passes through untouched.
   const href = toEmittedUrl(entry.url, baseUrl);
-  return `- [${entry.title}](${href})${entry.description ? `: ${entry.description}` : ""}\n`;
+  const desc = entry.description ? `: ${oneLine(entry.description)}` : "";
+  return `- [${linkText(entry.title)}](${href})${desc}\n`;
 }
 
 /** Generate /llms.txt content per llmstxt.org spec */
@@ -154,7 +179,7 @@ export function generateLlmsCtx(pages: PageResult[], config: AgentReadyConfig): 
   for (const page of pages) {
     // Prefer the published location over the crawl origin, which is often
     // localhost and meaningless to a reader of this file.
-    const source = baseUrl ? toEmittedUrl(page.path, baseUrl) : page.url;
+    const source = sourceUrl(page, baseUrl);
     output += `## ${page.title}\n\n`;
     output += `Source: ${source}\n\n`;
     output += page.markdown + "\n\n";

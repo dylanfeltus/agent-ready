@@ -232,6 +232,12 @@ function renderTable(table: Element): string | null {
   if (rows.length === 0) return null;
 
   const grid: string[][] = [];
+  // Tracks which grid rows are entirely <th>, to tell a column-header row from
+  // row labels. A matrix like `<tr><th>Feature</th><td>Yes</td></tr>` uses <th>
+  // for row labels; promoting that to the header would delete a whole row of
+  // data and relabel the columns with it.
+  const allHeaderCells: boolean[] = [];
+
   for (const row of rows) {
     const cells = Array.from(row.querySelectorAll("th, td"));
     if (cells.length === 0) continue;
@@ -241,6 +247,7 @@ function renderTable(table: Element): string | null {
       // cannot express it, so degrade rather than silently misalign columns.
       if (span && parseInt(span, 10) > 1) return null;
     }
+    allHeaderCells.push(cells.every((c) => c.nodeName.toUpperCase() === "TH"));
     grid.push(cells.map((c) => cellText(cellRenderer.turndown(c.innerHTML))));
   }
 
@@ -252,9 +259,10 @@ function renderTable(table: Element): string | null {
     while (row.length < width) row.push("");
   }
 
-  // GFM requires a header row. Use the table's own if it has one, otherwise
-  // synthesize an empty one so the body survives intact.
-  const hasHeader = !!table.querySelector("thead th, thead td, tr th");
+  // GFM requires a header row. Use the table's own if it genuinely leads with
+  // one, otherwise synthesize an empty one so the body survives intact.
+  const hasThead = !!table.querySelector("thead th, thead td");
+  const hasHeader = hasThead || allHeaderCells[0] === true;
   const header = hasHeader ? grid.shift()! : new Array(width).fill("");
   if (grid.length === 0) return null;
 

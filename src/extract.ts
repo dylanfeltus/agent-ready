@@ -27,6 +27,16 @@ const DEFAULT_STRIP = [
  */
 const STRIP_MARK = "\u2062\u2062STM\u2062\u2062";
 
+/**
+ * Elements that cannot hold children, so cannot carry a text mark.
+ * They also contribute no text to Readability's scoring, which is why removing
+ * them from the source outright is safe where removing a text block is not.
+ */
+const VOID_ELEMENTS = new Set([
+  "AREA", "BASE", "BR", "COL", "EMBED", "HR", "IMG", "INPUT",
+  "LINK", "META", "PARAM", "SOURCE", "TRACK", "WBR",
+]);
+
 function removeAll(root: Element | Document, selectors: string[]): number {
   let removed = 0;
   for (const sel of selectors) {
@@ -101,6 +111,14 @@ export function extractPage(
     for (const sel of userSelectors) {
       try {
         doc.querySelectorAll(sel).forEach((el) => {
+          if (VOID_ELEMENTS.has(el.nodeName.toUpperCase())) {
+            // A mark inserted into a void element does not survive
+            // serialization, so the strip would silently do nothing. These
+            // carry no text, so removing them here cannot shift the article
+            // root the way removing a text block can.
+            el.remove();
+            return;
+          }
           el.insertBefore(doc.createTextNode(STRIP_MARK), el.firstChild);
           marked++;
         });

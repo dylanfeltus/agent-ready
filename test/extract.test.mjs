@@ -234,3 +234,54 @@ test("1.3 a meta description still wins over the derived excerpt", () => {
   const { page: result } = extractPage(URL_, html, {});
   assert.equal(result.description, "The hand-written summary.");
 });
+
+/**
+ * A text mark cannot be a child of a void element and does not survive
+ * serialization, so --strip used to silently do nothing for `img.promo`.
+ */
+test("1.3 --strip removes void elements such as images", () => {
+  const body =
+    `<p>${"Genuine prose that carries the page. ".repeat(20)}</p>` +
+    `<img class="promo" src="/promo.png" alt="BUY NOW BANNER">` +
+    `<img src="/real.png" alt="A real content image">`;
+
+  const { page: result, report } = extractPage(URL_, page({ body }), {
+    stripSelectors: ["img.promo"],
+  });
+
+  assert.doesNotMatch(result.markdown, /BUY NOW BANNER/);
+  // Only what the selector matched is removed.
+  assert.match(result.markdown, /A real content image/);
+  assert.equal(report.lostIcons, 0);
+});
+
+/**
+ * <th> is used for row labels as often as for column headers. Treating a row
+ * label as a column header deletes a whole row of data and mislabels the rest.
+ */
+test("1.1 a matrix using th as row labels keeps every row", async () => {
+  const { markdown } = await toMarkdown(
+    "<table><tbody>" +
+      "<tr><th>Custom domain</th><td>Yes</td></tr>" +
+      "<tr><th>Analytics</th><td>Yes</td></tr>" +
+      "<tr><th>SSO</th><td>No</td></tr>" +
+      "</tbody></table>"
+  );
+
+  for (const row of ["Custom domain \\| Yes", "Analytics \\| Yes", "SSO \\| No"]) {
+    assert.match(markdown, new RegExp(`\\| ${row} \\|`));
+  }
+  // The synthesized header is empty; no data row was promoted into it.
+  assert.match(markdown, /^\|\s+\|\s+\|$/m);
+});
+
+test("1.1 a genuine all-th first row is still used as the header", async () => {
+  const { markdown } = await toMarkdown(
+    "<table><tbody>" +
+      "<tr><th>Feature</th><th>Free</th></tr>" +
+      "<tr><td>SSO</td><td>No</td></tr>" +
+      "</tbody></table>"
+  );
+  assert.match(markdown, /\| Feature \| Free \|/);
+  assert.match(markdown, /\| SSO \| No \|/);
+});

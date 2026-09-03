@@ -126,6 +126,53 @@ test("3.1 a command that exits immediately fails fast with its exit code", async
   );
 });
 
+/**
+ * A bare timeout is a long way from the error the server already printed.
+ * Surfacing that output is the difference between a one-line fix and an hour.
+ */
+test("3.1 a failing server command reports what it printed", async () => {
+  await assert.rejects(
+    () =>
+      startServer(
+        `node -e "console.error('config is wrong'); process.exit(1)"`,
+        { timeoutMs: 8000 }
+      ),
+    (err) => {
+      assert.match(err.message, /exited with code 1/);
+      assert.match(err.message, /Output from the server command/);
+      assert.match(err.message, /config is wrong/);
+      return true;
+    }
+  );
+});
+
+test("3.1 a server that never comes up reports its output too", async () => {
+  await assert.rejects(
+    () =>
+      startServer(
+        `node -e "console.error('waiting for database'); setInterval(()=>{},1e9)"`,
+        { timeoutMs: 2500 }
+      ),
+    (err) => {
+      assert.match(err.message, /Timed out/);
+      assert.match(err.message, /waiting for database/);
+      return true;
+    }
+  );
+});
+
+test("3.1 stop() removes its process listeners so repeated runs do not pile up", async () => {
+  const before = process.listenerCount("SIGINT");
+  const server = await startServer(`node ${script("leaf-server.mjs")}`);
+  assert.equal(process.listenerCount("SIGINT"), before + 1);
+  await server.stop();
+  assert.equal(
+    process.listenerCount("SIGINT"),
+    before,
+    "a stopped server must not leave signal handlers behind"
+  );
+});
+
 test("3.1 end to end: serve, crawl, tear down", async () => {
   const server = await startServer(`node ${script("leaf-server.mjs")}`);
   try {

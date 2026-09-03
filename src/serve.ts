@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 
 /**
@@ -11,10 +11,15 @@ import { createServer } from "node:net";
  *   child is then alive and serving somewhere else while the crawler reads
  *   whatever was already listening on the port we assumed. A liveness check
  *   cannot catch that — only refusing to share a port can.
- * - **We kill the process group, not the child.** `next start` forks. Killing
- *   the process we spawned leaves the real server holding the port, so the
- *   next run reads a stale build.
+ * - **We kill the whole process tree, not the child.** `next start` forks.
+ *   Killing the process we spawned leaves the real server holding the port, so
+ *   the next run reads a stale build. The group leader exiting is not proof
+ *   the group is gone either — a shell exits promptly on SIGTERM while a
+ *   server it forked can ignore the signal.
  */
+
+/** Windows has no process groups, so teardown needs a different mechanism. */
+const IS_WINDOWS = process.platform === "win32";
 
 export interface ServeHandle {
   url: string;
@@ -22,11 +27,17 @@ export interface ServeHandle {
   stop: () => Promise<void>;
 }
 
-/** Ask the OS for a free port and hand it straight to the child. */
+/**
+ * Ask the OS for a free port and hand it straight to the child.
+ *
+ * There is an unavoidable gap between closing the probe and the child binding,
+ * during which another process could take the port. Nothing portable closes it
+ * (passing the listening descriptor through a shell is not possible), so the
+ * gap is kept as small as possible instead.
+ */
 export function reservePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const probe = createServer();
-    probe.unref();
     probe.on("error", reject);
     probe.listen(0, "127.0.0.1", () => {
       const address = probe.address();
@@ -42,13 +53,21 @@ export function reservePort(): Promise<number> {
 }
 
 /** Poll until the server answers, or give up. */
-async function waitForServer(url: string, timeoutMs: number, child: ChildProcess): Promise<void> {
+async function waitForServer(
+  url: string,
+  timeoutMs: number,
+  child: ChildProcess,
+  output: () => string
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError = "no response";
 
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`Server command exited with code ${child.exitCode} before serving ${url}`);
+      throw new Error(
+        `Server command exited with code ${child.exitCode} before serving ${url}` +
+          describeOutput(output())
+      );
     }
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
@@ -61,11 +80,37 @@ async function waitForServer(url: string, timeoutMs: number, child: ChildProcess
     await new Promise((r) => setTimeout(r, 250));
   }
 
-  throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for ${url} (${lastError})`);
+  throw new Error(
+    `Timed out after ${timeoutMs / 1000}s waiting for ${url} (${lastError})` +
+      describeOutput(output())
+  );
 }
 
-/** True while any process remains in the group. */
-function groupAlive(pid: number): boolean {
+/**
+ * Append what the served command printed.
+ *
+ * Without this the only symptom of a misconfigured command is a bare timeout,
+ * which is a long way from the actual error the server already reported.
+ */
+function describeOutput(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  return `\n\n  Output from the server command:\n${trimmed
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n")}`;
+}
+
+/** True while any process in the child's tree remains. */
+function treeAlive(child: ChildProcess): boolean {
+  const pid = child.pid;
+  if (pid === undefined) return false;
+
+  if (IS_WINDOWS) {
+    // No process groups to interrogate; the spawned process is the best proxy.
+    return child.exitCode === null;
+  }
+
   try {
     // Signal 0 performs the permission and existence check without delivering.
     process.kill(-pid, 0);
@@ -79,46 +124,55 @@ function groupAlive(pid: number): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Kill a whole process group, escalating if it does not go quietly.
- *
- * The group leader exiting is NOT proof the group is gone: a shell exits
- * promptly on SIGTERM while a server it forked can ignore the signal and keep
- * the port. So this waits on the group itself rather than on the child, which
- * is the difference between a clean next run and one that reads a stale build.
- */
-async function killGroup(child: ChildProcess, graceMs: number): Promise<void> {
+/** Signal the child's whole tree, however the platform expresses that. */
+function signalTree(child: ChildProcess, force: boolean): void {
   const pid = child.pid;
   if (pid === undefined) return;
 
-  const signalGroup = (signal: NodeJS.Signals) => {
-    try {
-      // Negative pid targets the group. The child was spawned detached, so it
-      // leads its own group and anything it forked is inside it.
-      process.kill(-pid, signal);
-    } catch {
-      try { child.kill(signal); } catch { /* already gone */ }
+  if (IS_WINDOWS) {
+    // A negative pid is not a process group on Windows; taskkill /T walks the
+    // tree, which is what reaches a server the command forked.
+    const args = ["/pid", String(pid), "/T"];
+    if (force) args.push("/F");
+    const result = spawnSync("taskkill", args, { stdio: "ignore" });
+    if (result.error) {
+      try { child.kill(force ? "SIGKILL" : "SIGTERM"); } catch { /* gone */ }
     }
-  };
+    return;
+  }
 
-  signalGroup("SIGTERM");
+  const signal: NodeJS.Signals = force ? "SIGKILL" : "SIGTERM";
+  try {
+    // Negative pid targets the group. The child was spawned detached, so it
+    // leads its own group and anything it forked is inside it.
+    process.kill(-pid, signal);
+  } catch {
+    try { child.kill(signal); } catch { /* already gone */ }
+  }
+}
+
+/** Terminate the child's tree, escalating if it does not go quietly. */
+async function killTree(child: ChildProcess, graceMs: number): Promise<void> {
+  if (child.pid === undefined) return;
+
+  signalTree(child, false);
 
   const deadline = Date.now() + graceMs;
-  while (Date.now() < deadline && groupAlive(pid)) await sleep(50);
+  while (Date.now() < deadline && treeAlive(child)) await sleep(50);
 
-  if (!groupAlive(pid)) return;
+  if (!treeAlive(child)) return;
 
-  signalGroup("SIGKILL");
+  signalTree(child, true);
   const hardDeadline = Date.now() + 2_000;
-  while (Date.now() < hardDeadline && groupAlive(pid)) await sleep(50);
+  while (Date.now() < hardDeadline && treeAlive(child)) await sleep(50);
 }
 
 export interface ServeOptions {
   /** Milliseconds to wait for the server to answer. */
   timeoutMs?: number;
-  /** Milliseconds between SIGTERM and SIGKILL on teardown. */
+  /** Milliseconds between the polite signal and the forceful one. */
   graceMs?: number;
-  /** Stream the served command's output. */
+  /** Stream the served command's output instead of capturing it. */
   verbose?: boolean;
 }
 
@@ -141,34 +195,52 @@ export async function startServer(
 
   const child = spawn(resolved, {
     shell: true,
-    // Own process group, so teardown can take the whole tree.
-    detached: true,
-    stdio: verbose ? "inherit" : "ignore",
+    // Own process group, so teardown can take the whole tree. Meaningless on
+    // Windows, where taskkill /T does the walking instead.
+    detached: !IS_WINDOWS,
+    stdio: verbose ? "inherit" : ["ignore", "pipe", "pipe"],
     env: { ...process.env, PORT: String(port) },
   });
+
+  // Keep a bounded tail of what the command printed, to explain a failure.
+  let tail = "";
+  const record = (chunk: unknown) => {
+    tail = (tail + String(chunk)).slice(-2000);
+  };
+  child.stdout?.on("data", record);
+  child.stderr?.on("data", record);
 
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
     stopped = true;
-    await killGroup(child, graceMs);
+    process.off("exit", onExit);
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+    await killTree(child, graceMs);
   };
 
-  // Don't leave an orphaned server behind if we die unexpectedly.
-  process.once("exit", () => { void stop(); });
+  // Don't leave an orphaned server behind if we die unexpectedly. Only the
+  // first signal is delivered synchronously here — an escalation cannot run
+  // during 'exit' — but that is enough for a server that respects SIGTERM.
+  const onExit = () => { void stop(); };
 
   // Installing a signal listener suppresses Node's default termination, so we
   // have to terminate ourselves. Without this, Ctrl-C would stop the server
   // and let the crawl carry on against it, writing an incomplete mirror and
   // exiting successfully.
-  const onSignal = (code: number) => () => {
+  const terminateWith = (code: number) => () => {
     void stop().finally(() => process.exit(code));
   };
-  process.once("SIGINT", onSignal(130));
-  process.once("SIGTERM", onSignal(143));
+  const onSigint = terminateWith(130);
+  const onSigterm = terminateWith(143);
+
+  process.once("exit", onExit);
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
 
   try {
-    await waitForServer(url, timeoutMs, child);
+    await waitForServer(url, timeoutMs, child, () => tail);
   } catch (err) {
     await stop();
     throw err;

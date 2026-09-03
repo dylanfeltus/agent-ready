@@ -97,6 +97,28 @@ test("3.1 a server that skips to another port is a failure, not a silent crawl",
   }
 });
 
+/**
+ * The group leader exiting is not proof the group is gone. A shell exits
+ * promptly on SIGTERM while a server it forked can ignore the signal and keep
+ * the port — which is the stale-build failure --serve exists to prevent.
+ */
+test("3.1 stop() waits for the group, not just the leader", async () => {
+  const server = await startServer(`node ${script("stubborn-forking-server.mjs")}`, {
+    graceMs: 1500,
+  });
+  const { port } = server;
+
+  assert.equal((await fetch(server.url)).status, 200);
+
+  await server.stop();
+
+  assert.equal(
+    await portIsFree(port),
+    true,
+    "a SIGTERM-ignoring descendant must still be killed before stop() resolves"
+  );
+});
+
 test("3.1 a command that exits immediately fails fast with its exit code", async () => {
   await assert.rejects(
     () => startServer("node -e \"process.exit(3)\"", { timeoutMs: 10_000 }),

@@ -160,3 +160,18 @@ test("2.1 an off-site link is never rebased onto baseUrl", async () => {
   });
   assert.match(txt, /\(https:\/\/api\.other\.com\/spec\.json\)/);
 });
+
+test("2.3 a site-relative external entry obeys baseUrl", () => {
+  const txt = generateLlmsTxt(pages, {
+    baseUrl: "https://mysite.com",
+    sections: {
+      Ext: [
+        { title: "Spec", url: "/openapi.json" },
+        { title: "Offsite", url: "https://other.example/x" },
+      ],
+    },
+  });
+  assert.match(txt, /\[Spec\]\(https:\/\/mysite\.com\/openapi\.json\)/);
+  // An absolute entry is already addressable and must pass through untouched.
+  assert.match(txt, /\[Offsite\]\(https:\/\/other\.example\/x\)/);
+});

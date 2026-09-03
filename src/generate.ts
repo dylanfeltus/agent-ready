@@ -74,8 +74,11 @@ function renderPageLine(page: PageResult, baseUrl?: string): string {
   return `- [${page.title}](${href})${page.description ? `: ${page.description}` : ""}\n`;
 }
 
-function renderEntryLine(entry: ExternalEntry): string {
-  return `- [${entry.title}](${entry.url})${entry.description ? `: ${entry.description}` : ""}\n`;
+function renderEntryLine(entry: ExternalEntry, baseUrl?: string): string {
+  // A site-relative entry (e.g. /openapi.json) is an emitted URL like any
+  // other and must obey baseUrl; an absolute one passes through untouched.
+  const href = toEmittedUrl(entry.url, baseUrl);
+  return `- [${entry.title}](${href})${entry.description ? `: ${entry.description}` : ""}\n`;
 }
 
 /** Generate /llms.txt content per llmstxt.org spec */
@@ -131,7 +134,7 @@ export function generateLlmsTxt(pages: PageResult[], config: AgentReadyConfig): 
 
     output += `## ${name}\n\n`;
     for (const page of sectionPages) output += renderPageLine(page, baseUrl);
-    for (const entry of external) output += renderEntryLine(entry);
+    for (const entry of external) output += renderEntryLine(entry, baseUrl);
     output += "\n";
   }
 

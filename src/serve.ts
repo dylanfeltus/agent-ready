@@ -64,41 +64,53 @@ async function waitForServer(url: string, timeoutMs: number, child: ChildProcess
   throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for ${url} (${lastError})`);
 }
 
-/** Kill a whole process group, escalating if it does not go quietly. */
-function killGroup(child: ChildProcess, graceMs: number): Promise<void> {
-  return new Promise((resolveKill) => {
-    if (child.exitCode !== null || child.pid === undefined) {
-      resolveKill();
-      return;
-    }
+/** True while any process remains in the group. */
+function groupAlive(pid: number): boolean {
+  try {
+    // Signal 0 performs the permission and existence check without delivering.
+    process.kill(-pid, 0);
+    return true;
+  } catch (err) {
+    // ESRCH is the only answer that means "nothing left"; EPERM means
+    // something is still there that we merely cannot signal.
+    return (err as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
 
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolveKill();
-    };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    child.once("exit", done);
+/**
+ * Kill a whole process group, escalating if it does not go quietly.
+ *
+ * The group leader exiting is NOT proof the group is gone: a shell exits
+ * promptly on SIGTERM while a server it forked can ignore the signal and keep
+ * the port. So this waits on the group itself rather than on the child, which
+ * is the difference between a clean next run and one that reads a stale build.
+ */
+async function killGroup(child: ChildProcess, graceMs: number): Promise<void> {
+  const pid = child.pid;
+  if (pid === undefined) return;
 
-    // Negative pid targets the group. The child was spawned detached, so it
-    // leads its own group and any server it forked is inside it.
+  const signalGroup = (signal: NodeJS.Signals) => {
     try {
-      process.kill(-child.pid, "SIGTERM");
+      // Negative pid targets the group. The child was spawned detached, so it
+      // leads its own group and anything it forked is inside it.
+      process.kill(-pid, signal);
     } catch {
-      try { child.kill("SIGTERM"); } catch { /* already gone */ }
+      try { child.kill(signal); } catch { /* already gone */ }
     }
+  };
 
-    const timer = setTimeout(() => {
-      try {
-        process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        try { child.kill("SIGKILL"); } catch { /* already gone */ }
-      }
-      done();
-    }, graceMs);
-  });
+  signalGroup("SIGTERM");
+
+  const deadline = Date.now() + graceMs;
+  while (Date.now() < deadline && groupAlive(pid)) await sleep(50);
+
+  if (!groupAlive(pid)) return;
+
+  signalGroup("SIGKILL");
+  const hardDeadline = Date.now() + 2_000;
+  while (Date.now() < hardDeadline && groupAlive(pid)) await sleep(50);
 }
 
 export interface ServeOptions {

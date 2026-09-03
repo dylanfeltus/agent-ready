@@ -201,3 +201,36 @@ test("1.1 an image whose src names a tick still resolves", async () => {
   );
   assert.match(markdown, /\| Feature \| ✓ \|/);
 });
+
+/**
+ * The description used to come from Readability's excerpt, computed before
+ * stripping — so stripped text, and the internal strip marks, reached
+ * llms.txt even though the mirror was clean.
+ */
+test("1.3 stripped content never reaches the page description", () => {
+  const body =
+    `<div class="promo">SECRET PROMO TEXT.</div>` +
+    `<p>${"Genuine article prose continues here. ".repeat(20)}</p>`;
+
+  const { page: result } = extractPage(URL_, page({ body }), {
+    stripSelectors: [".promo"],
+  });
+
+  assert.doesNotMatch(result.markdown, /SECRET PROMO/);
+  assert.doesNotMatch(result.description, /SECRET PROMO/);
+  // The sentinel used to carry the strip through Readability must never leak.
+  assert.doesNotMatch(result.description, /STM/);
+  assert.doesNotMatch(result.description, /[\u2062]/);
+  // It is still a real description drawn from the surviving article text.
+  assert.ok(result.description.length > 40);
+  assert.match(result.description, /Choose a plan|Genuine article prose/);
+});
+
+test("1.3 a meta description still wins over the derived excerpt", () => {
+  const html = page({
+    head: '<meta name="description" content="The hand-written summary.">',
+    body: `<p>${"Body prose here. ".repeat(20)}</p>`,
+  });
+  const { page: result } = extractPage(URL_, html, {});
+  assert.equal(result.description, "The hand-written summary.");
+});

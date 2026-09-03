@@ -126,6 +126,13 @@ export function extractPage(
   // Their effect is local: nothing outside the matched element is touched.
   if (marked > 0) removeMarked(articleBody);
 
+  // Derive the fallback description from the cleaned article rather than
+  // Readability's excerpt, which was computed before stripping and would
+  // otherwise carry removed content — and the strip marks themselves —
+  // straight into llms.txt. Taken before icon resolution so ✓/— markers
+  // don't end up in prose.
+  const excerpt = excerptFrom(articleBody.textContent || "");
+
   // Resolve tick/cross icons to ✓ / — before conversion. Turndown drops
   // text-free nodes via its blankRule before custom rules run, so this cannot
   // be a Turndown rule.
@@ -154,7 +161,7 @@ export function extractPage(
       path,
       title,
       markdown: `# ${title}\n\n${markdown}`,
-      description: metaDesc || article.excerpt?.trim() || undefined,
+      description: metaDesc || excerpt,
       fallbackTitle: documentTitle || undefined,
     },
     report: {
@@ -164,6 +171,27 @@ export function extractPage(
       degradedTables: loss.degradedTables,
     },
   };
+}
+
+/** Longest description we will synthesise from article text. */
+const EXCERPT_LIMIT = 200;
+
+/** A one-line summary drawn from the cleaned article body. */
+function excerptFrom(text: string): string | undefined {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return undefined;
+  if (clean.length <= EXCERPT_LIMIT) return clean;
+
+  // Prefer cutting at a sentence end so the description reads as a sentence.
+  const window = clean.slice(0, EXCERPT_LIMIT);
+  const stop = Math.max(
+    window.lastIndexOf(". "),
+    window.lastIndexOf("! "),
+    window.lastIndexOf("? ")
+  );
+  return stop > EXCERPT_LIMIT / 2
+    ? window.slice(0, stop + 1).trim()
+    : `${window.trimEnd()}…`;
 }
 
 /**

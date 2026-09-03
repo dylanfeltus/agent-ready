@@ -170,3 +170,34 @@ test("2.2 --title-source title forces the document title", () => {
   assert.equal(result.title, "Pricing — Example");
   assert.match(result.markdown, /^# Pricing — Example/);
 });
+
+/**
+ * An ordinary content image is not an icon. Counting it as an unresolved one
+ * produced a false unresolved-icons warning on any page with a picture, which
+ * would fail --strict for no reason.
+ */
+test("1.1 content images are not counted as unresolved icons", () => {
+  const body =
+    `<p>${"Article prose that carries the page. ".repeat(12)}</p>` +
+    `<img src="/hero.png" alt="Our team at the summit">` +
+    `<img src="/chart.png" alt="Revenue by quarter">`;
+
+  const { page: result, report } = extractPage(URL_, page({ body }), {});
+  assert.equal(report.lostIcons, 0);
+  assert.match(result.markdown, /!\[Our team at the summit\]/);
+  assert.match(result.markdown, /!\[Revenue by quarter\]/);
+});
+
+test("1.1 an altless image with no signal is still counted as lost", async () => {
+  const { lostIcons } = await toMarkdown(
+    `<table><tbody><tr><td>Feature</td><td><img src="/x.png"></td></tr></tbody></table>`
+  );
+  assert.equal(lostIcons, 1);
+});
+
+test("1.1 an image whose src names a tick still resolves", async () => {
+  const { markdown } = await toMarkdown(
+    `<table><tbody><tr><td>Feature</td><td><img src="/icons/check.svg"></td></tr></tbody></table>`
+  );
+  assert.match(markdown, /\| Feature \| ✓ \|/);
+});

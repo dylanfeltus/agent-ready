@@ -151,15 +151,23 @@ async function main() {
     process.exit(0);
   }
 
-  const serveCommand = flags.serve as string | undefined;
-
-  // --serve supplies the target itself.
-  if (flags.help || (!target && !serveCommand)) {
+  // --help must work even when a config file is broken, so it is handled
+  // before the config is loaded.
+  if (flags.help) {
     printHelp();
-    process.exit(flags.help ? 0 : 1);
+    process.exit(0);
   }
 
   const fileConfig = await loadConfigFile(flags.config as string | undefined);
+
+  // A serve command may come from either place; --serve wins.
+  const serveCommand = (flags.serve as string | undefined) ?? fileConfig.serve;
+
+  // --serve supplies the target itself.
+  if (!target && !serveCommand) {
+    printHelp();
+    process.exit(1);
+  }
 
   const chalk = (await import("chalk")).default;
   const { default: ora } = await import("ora");
@@ -220,7 +228,7 @@ async function main() {
   };
 
   const label = isUrl ? effectiveTarget : resolve(effectiveTarget);
-  const isReport = !!flags.report;
+  const isReport = config.report === true;
 
   console.log(chalk.gray(`  ${isReport ? "Auditing" : "Making"} ${label}${isReport ? "" : " agent-readable"}...\n`));
 

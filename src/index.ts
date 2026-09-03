@@ -33,14 +33,56 @@ function walkDir(dir: string): string[] {
 }
 
 /**
- * Rewrite crawl-origin URLs in a page mirror to the publish origin.
- *
- * Links are resolved against the crawl URL during extraction, so a localhost
- * crawl otherwise bakes `http://localhost:3000/pricing` into every mirror.
+ * Base that extractLocalFile resolves directory builds against.
+ * Kept in step with the fake URL it builds.
  */
-function rewriteMarkdownOrigin(markdown: string, from: string, to: string): string {
-  if (from === to) return markdown;
-  return markdown.split(from).join(to);
+const LOCAL_BASE = "http://localhost";
+
+/** Matches a markdown link or image destination: the `](dest)` part. */
+const LINK_DESTINATION = /(!?\[[^\]]*\]\()([^)\s]+)([^)]*\))/g;
+
+/** The absolute URL a page's content was resolved against during extraction. */
+function pageSourceUrl(page: PageResult, config: AgentReadyConfig): string {
+  if (config.url) return page.url;
+  // Directory builds carry a relative path; extraction used LOCAL_BASE.
+  try {
+    return new URL(page.url, LOCAL_BASE).href;
+  } catch {
+    return LOCAL_BASE;
+  }
+}
+
+/**
+ * Point every same-site link in a mirror at the publish origin.
+ *
+ * Each destination is resolved against the page's own URL first, so relative
+ * hrefs — the common case, and ones a plain origin substitution would miss —
+ * are rewritten too. Off-site links and bare fragments are left alone.
+ */
+function rewriteLinks(markdown: string, sourceUrl: string, baseUrl: string): string {
+  let source: URL;
+  try {
+    source = new URL(sourceUrl);
+  } catch {
+    return markdown;
+  }
+
+  return markdown.replace(LINK_DESTINATION, (match, open, dest: string, close) => {
+    // An in-page anchor reads better left relative.
+    if (dest.startsWith("#")) return match;
+    try {
+      const absolute = new URL(dest, source);
+      // mailto:, tel: and genuinely external links keep their destination.
+      if (absolute.origin !== source.origin) return match;
+      const rebased = new URL(
+        absolute.pathname + absolute.search + absolute.hash,
+        baseUrl
+      );
+      return `${open}${rebased.href}${close}`;
+    } catch {
+      return match;
+    }
+  });
 }
 
 /**
@@ -176,13 +218,18 @@ export async function agentReady(config: AgentReadyConfig): Promise<GenerateResu
     checkConversionLoss(page.path, report.lostIcons, report.degradedTables, diagnostics);
   }
 
-  // Rewrite mirrors to the publish origin when it differs from the crawl.
-  if (config.baseUrl && config.url) {
+  // Point mirror links at the publish origin. This covers directory builds
+  // too, where extraction resolved links against a placeholder localhost base.
+  if (config.baseUrl) {
     try {
-      const from = new URL(config.url).origin;
-      const to = new URL(config.baseUrl).origin;
+      // Validate once; a malformed baseUrl leaves every mirror untouched.
+      new URL(config.baseUrl);
       for (const page of pages) {
-        page.markdown = rewriteMarkdownOrigin(page.markdown, from, to);
+        page.markdown = rewriteLinks(
+          page.markdown,
+          pageSourceUrl(page, config),
+          config.baseUrl
+        );
       }
     } catch { /* malformed baseUrl — leave mirrors alone */ }
   }

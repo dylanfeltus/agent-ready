@@ -143,10 +143,17 @@ export async function startServer(
   };
 
   // Don't leave an orphaned server behind if we die unexpectedly.
-  const onExit = () => { void stop(); };
-  process.once("exit", onExit);
-  process.once("SIGINT", onExit);
-  process.once("SIGTERM", onExit);
+  process.once("exit", () => { void stop(); });
+
+  // Installing a signal listener suppresses Node's default termination, so we
+  // have to terminate ourselves. Without this, Ctrl-C would stop the server
+  // and let the crawl carry on against it, writing an incomplete mirror and
+  // exiting successfully.
+  const onSignal = (code: number) => () => {
+    void stop().finally(() => process.exit(code));
+  };
+  process.once("SIGINT", onSignal(130));
+  process.once("SIGTERM", onSignal(143));
 
   try {
     await waitForServer(url, timeoutMs, child);

@@ -109,6 +109,10 @@ function visibleText(el: Element): string {
  */
 function isIconOnly(el: Element): boolean {
   if (!ICON_TAGS.has(el.nodeName.toUpperCase())) return false;
+  // An image with alt text carries its meaning in that text and round-trips as
+  // markdown. It is content, not an icon — counting it as an unresolved icon
+  // would fail --strict on any ordinary page that contains a picture.
+  if (el.nodeName.toUpperCase() === "IMG" && attr(el, "alt")) return false;
   return !visibleText(el);
 }
 

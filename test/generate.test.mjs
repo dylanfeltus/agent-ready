@@ -110,3 +110,53 @@ test("sections keep their declared order", () => {
   });
   assert.ok(txt.indexOf("## Pricing") < txt.indexOf("## Docs"));
 });
+
+/**
+ * §2.1 (follow-up) — a plain origin substitution missed relative links and
+ * skipped directory builds entirely, so mirrors kept localhost destinations.
+ */
+test("2.1 baseUrl rewrites relative mirror links on a directory build", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { agentReady } = await import("../dist/index.js");
+  const { FILLER } = await import("./fixtures.mjs");
+
+  const dir = mkdtempSync(join(tmpdir(), "stm-base-"));
+  const site = join(dir, "site");
+  mkdirSync(site);
+  writeFileSync(
+    join(site, "index.html"),
+    `<!doctype html><html><head><title>Home</title></head><body><main><h1>Home</h1>` +
+      `<p>${FILLER}</p><p>See <a href="/pricing">pricing</a>, ` +
+      `<a href="docs/start">docs</a>, ` +
+      `<a href="https://other.example/x">elsewhere</a>, ` +
+      `<a href="#top">top</a>.</p></main></body></html>`
+  );
+
+  const result = await agentReady({
+    dir: site,
+    outDir: join(dir, "out"),
+    baseUrl: "https://mysite.com",
+    report: true,
+  });
+
+  const md = result.pages[0].markdown;
+  assert.match(md, /\[pricing\]\(https:\/\/mysite\.com\/pricing\)/);
+  assert.match(md, /\[docs\]\(https:\/\/mysite\.com\/docs\/start\)/);
+  assert.doesNotMatch(md, /localhost/, "no crawl-time host may survive");
+
+  // Off-site links and in-page anchors are left as they were.
+  assert.match(md, /\[elsewhere\]\(https:\/\/other\.example\/x\)/);
+  assert.match(md, /\[top\]\(#top\)/);
+});
+
+test("2.1 an off-site link is never rebased onto baseUrl", async () => {
+  const { generateLlmsTxt } = await import("../dist/generate.js");
+  // Sanity check on the index side: external section entries stay verbatim.
+  const txt = generateLlmsTxt(pages, {
+    baseUrl: "https://mysite.com",
+    sections: { Ext: [{ title: "Spec", url: "https://api.other.com/spec.json" }] },
+  });
+  assert.match(txt, /\(https:\/\/api\.other\.com\/spec\.json\)/);
+});

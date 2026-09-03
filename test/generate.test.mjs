@@ -311,3 +311,21 @@ test("an Optional section is emitted last whatever its declared order", () => {
     "Optional carries a defined meaning and belongs at the end"
   );
 });
+
+/**
+ * A path segment is a slug, not a heading. Hand-written llms.txt files say
+ * "Revenue Recognition" (Stripe), not "Revenue-recognition".
+ */
+test("auto-detected section headings read as titles, not slugs", () => {
+  const slugged = [
+    "/use-cases/saas",
+    "/revenue-recognition/asc-606",
+    "/data-pipeline/setup",
+  ].map((p) => ({ url: `http://h${p}`, path: p, title: "x", markdown: "#" }));
+
+  const txt = generateLlmsTxt(slugged, {});
+  assert.match(txt, /## Use Cases/);
+  assert.match(txt, /## Revenue Recognition/);
+  assert.match(txt, /## Data Pipeline/);
+  assert.doesNotMatch(txt, /## \S*-\S*/, "no slug should reach a heading");
+});

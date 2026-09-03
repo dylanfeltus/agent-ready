@@ -79,6 +79,21 @@ function globsOf(spec: SectionSpec): string[] {
   return spec as string[];
 }
 
+/**
+ * Turn a URL slug into a section heading.
+ *
+ * A path segment is a slug, not a title: "revenue-recognition" should read as
+ * "Revenue Recognition", the way a hand-written llms.txt words it, rather than
+ * leaking the hyphen into the document.
+ */
+function headingFromSlug(slug: string): string {
+  return slug
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 /** Pages that matched none of the configured section globs. */
 export function unsectionedPages(
   pages: PageResult[],
@@ -108,8 +123,7 @@ function assignSections(pages: PageResult[], config: AgentReadyConfig): PageResu
   return pages.map((page) => {
     const segments = page.path.split("/").filter(Boolean);
     if (segments.length >= 2) {
-      const section = segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
-      return { ...page, section };
+      return { ...page, section: headingFromSlug(segments[0]) };
     }
     return page;
   });

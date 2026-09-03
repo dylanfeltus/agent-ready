@@ -83,6 +83,16 @@ export function extractPage(
     ?.getAttribute("content")
     ?.trim() || undefined;
 
+  // The site's own name for itself. Used to title llms.txt, and to strip the
+  // suffix every page title repeats.
+  const siteName = doc
+    .querySelector('meta[property="og:site_name"]')
+    ?.getAttribute("content")
+    ?.trim() || undefined;
+
+  // The homepage's <h1> is the usual fallback for a site name.
+  const firstHeading = doc.querySelector("h1")?.textContent?.trim() || undefined;
+
   removeAll(doc, DEFAULT_STRIP);
 
   const userSelectors = config.stripSelectors || [];
@@ -181,6 +191,8 @@ export function extractPage(
       markdown: `# ${title}\n\n${markdown}`,
       description: metaDesc || excerpt,
       fallbackTitle: documentTitle || undefined,
+      siteName,
+      heading: firstHeading,
     },
     report: {
       source,

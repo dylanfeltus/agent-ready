@@ -229,3 +229,78 @@ test("two pages writing to one mirror file are reported, not silently merged", a
     await site.close();
   }
 });
+
+/** llms.txt titled "Website" is a placeholder where the answer was on the page. */
+test("the site title is taken from og:site_name rather than defaulting", async () => {
+  const site = await serveFixtures({
+    "/sitemap.xml": { type: "application/xml", body: productionSitemap(["/", "/pricing"]) },
+    "/": {
+      body: page({
+        title: "Acme Analytics — analytics without a warehouse",
+        head: '<meta property="og:site_name" content="Acme Analytics">',
+        body: "<p>Home body text that carries the page.</p>",
+      }),
+    },
+    "/pricing": {
+      body: page({
+        title: "Pricing — Acme Analytics",
+        head: '<meta property="og:site_name" content="Acme Analytics">',
+        body: "<p>Pricing body text that carries the page.</p>",
+      }),
+    },
+  });
+
+  try {
+    const result = await agentReady({ url: site.origin, report: true });
+    assert.match(result.llmsTxt, /^# Acme Analytics/);
+    assert.doesNotMatch(result.llmsTxt, /^# Website/m);
+  } finally {
+    await site.close();
+  }
+});
+
+test("a site name repeated in every page title is removed once", async () => {
+  const head = '<meta property="og:site_name" content="Acme Analytics">';
+  const site = await serveFixtures({
+    "/sitemap.xml": {
+      type: "application/xml",
+      body: productionSitemap(["/", "/pricing", "/docs"]),
+    },
+    "/": { body: page({ title: "Acme Analytics — the home page", head, body: "<p>Home body text here.</p>" }) },
+    "/pricing": { body: page({ title: "Pricing — Acme Analytics", head, body: "<p>Pricing body text.</p>" }) },
+    "/docs": { body: page({ title: "Docs — Acme Analytics", head, body: "<p>Docs body text here.</p>" }) },
+  });
+
+  try {
+    const result = await agentReady({ url: site.origin, report: true });
+    const titles = result.pages.map((p) => p.title);
+
+    assert.ok(titles.includes("Pricing"), `got ${JSON.stringify(titles)}`);
+    assert.ok(titles.includes("Docs"), `got ${JSON.stringify(titles)}`);
+    // The homepage keeps its full title; stripping there leaves a fragment.
+    assert.ok(titles.some((t) => t.startsWith("Acme Analytics")));
+
+    // The trim is announced, like every other repair.
+    assert.equal(result.diagnostics.filter((d) => d.code === "title-trimmed").length, 1);
+  } finally {
+    await site.close();
+  }
+});
+
+test("one page styling its title that way is not treated as a convention", async () => {
+  const head = '<meta property="og:site_name" content="Acme">';
+  const site = await serveFixtures({
+    "/sitemap.xml": { type: "application/xml", body: productionSitemap(["/", "/pricing"]) },
+    "/": { body: page({ title: "Home", head, body: "<p>Home body text here.</p>" }) },
+    "/pricing": { body: page({ title: "Pricing — Acme", head, body: "<p>Pricing body text.</p>" }) },
+  });
+
+  try {
+    const result = await agentReady({ url: site.origin, report: true });
+    // Only one page matches, so nothing is trimmed.
+    assert.ok(result.pages.some((p) => p.title === "Pricing — Acme"));
+    assert.equal(result.diagnostics.filter((d) => d.code === "title-trimmed").length, 0);
+  } finally {
+    await site.close();
+  }
+});

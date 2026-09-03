@@ -87,6 +87,10 @@ export interface PageResult {
   section?: string;
   /** The page's own <title>, kept to offer when og:title is duplicated. */
   fallbackTitle?: string;
+  /** og:site_name, if the page declares one. */
+  siteName?: string;
+  /** The page's first <h1>, used as a fallback site name on the homepage. */
+  heading?: string;
 }
 
 export interface GenerateResult {

@@ -133,6 +133,104 @@ function resolveTitles(pages: PageResult[], diagnostics: Diagnostics): void {
   );
 }
 
+/** Separators sites put between a page name and their own name. */
+const TITLE_SEPARATORS = ["—", "–", "|", "·", "::", ":", "-"];
+
+/** The most common non-empty value, or undefined. */
+function mostCommon(values: (string | undefined)[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const key = value?.trim();
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * Work out what the site is called.
+ *
+ * "Website" is a placeholder that makes the H1 of llms.txt useless, and the
+ * answer is usually sitting in og:site_name on every page.
+ */
+function inferSiteTitle(pages: PageResult[], config: AgentReadyConfig): string | undefined {
+  const declared = mostCommon(pages.map((p) => p.siteName));
+  if (declared) return declared;
+
+  const home = pages.find((p) => p.path === "/" || p.path === "/index");
+  if (home?.heading) return home.heading;
+
+  if (config.url) {
+    try {
+      return new URL(config.url).hostname.replace(/^www\./, "");
+    } catch { /* fall through */ }
+  }
+  return undefined;
+}
+
+/**
+ * Drop the site name repeated on every page title.
+ *
+ * "Pricing — Acme Analytics" under a heading that already says Acme Analytics
+ * spends tokens on the same words once per line. Only the site's own name is
+ * stripped, and only where it appears as a separated prefix or suffix, so a
+ * title that genuinely reads that way is left alone.
+ */
+function stripSiteNameFromTitles(
+  pages: PageResult[],
+  siteTitle: string,
+  diagnostics: Diagnostics
+): void {
+  const trimOne = (title: string): string => {
+    for (const sep of TITLE_SEPARATORS) {
+      const suffix = `${sep} ${siteTitle}`;
+      if (title.endsWith(suffix)) {
+        const trimmed = title.slice(0, -suffix.length).trim();
+        if (trimmed) return trimmed;
+      }
+      const prefix = `${siteTitle} ${sep}`;
+      if (title.startsWith(prefix)) {
+        const trimmed = title.slice(prefix.length).trim();
+        if (trimmed) return trimmed;
+      }
+    }
+    return title;
+  };
+
+  const candidates = pages.filter(
+    (p) =>
+      // The homepage is the site, so its title carrying the site name is not
+      // redundant — stripping it leaves a fragment like "product analytics
+      // without the warehouse" as the link label.
+      p.path !== "/" &&
+      p.path !== "/index" &&
+      trimOne(p.title) !== p.title
+  );
+  // One page styling its title that way is not a site-wide convention.
+  if (candidates.length < 2) return;
+
+  for (const page of candidates) {
+    const next = trimOne(page.title);
+    page.markdown = page.markdown.replace(`# ${page.title}`, `# ${next}`);
+    page.title = next;
+  }
+
+  diagnostics.add({
+    level: "info",
+    code: "title-trimmed",
+    message: `Removed the repeated "${siteTitle}" from ${candidates.length} page titles`,
+    detail: "The site name is already the heading of llms.txt.",
+  });
+}
+
 /** Main function — crawl/read + extract + generate */
 export async function agentReady(config: AgentReadyConfig): Promise<GenerateResult> {
   // Default output dir: use URL hostname if available, otherwise generic
@@ -228,6 +326,13 @@ export async function agentReady(config: AgentReadyConfig): Promise<GenerateResu
       message: `${group.length} pages write to ${target}; only the last survives`,
       detail: group.map((p) => p.url).join(", "),
     });
+  }
+
+  // Give llms.txt a real name and stop every entry repeating it.
+  const siteTitle = config.title || inferSiteTitle(pages, config);
+  if (siteTitle) {
+    config = { ...config, title: config.title || siteTitle };
+    stripSiteNameFromTitles(pages, siteTitle, diagnostics);
   }
 
   // Content-loss guard, per page.

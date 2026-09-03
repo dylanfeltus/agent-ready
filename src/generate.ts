@@ -92,9 +92,16 @@ function linkText(text: string): string {
   return oneLine(text).replace(/([[\]])/g, "\\$1");
 }
 
-function renderPageLine(page: PageResult, baseUrl?: string): string {
+function renderPageLine(
+  page: PageResult,
+  baseUrl?: string,
+  summary?: string
+): string {
   const href = toEmittedUrl(mirrorPath(page), baseUrl);
-  const desc = page.description ? `: ${oneLine(page.description)}` : "";
+  const text = page.description ? oneLine(page.description) : "";
+  // The site summary is already the line above the list; repeating it verbatim
+  // on the page it came from spends tokens saying nothing new.
+  const desc = text && text !== summary ? `: ${text}` : "";
   return `- [${linkText(page.title)}](${href})${desc}\n`;
 }
 
@@ -111,6 +118,7 @@ export function generateLlmsTxt(pages: PageResult[], config: AgentReadyConfig): 
   const title = config.title || "Website";
   const desc = config.description || pages[0]?.description || "Documentation and content";
   const baseUrl = config.baseUrl;
+  const summary = oneLine(desc);
 
   const pagesWithSections = assignSections(pages, config);
 
@@ -137,7 +145,7 @@ export function generateLlmsTxt(pages: PageResult[], config: AgentReadyConfig): 
 
   // Write unsectioned pages first
   for (const page of unsectioned) {
-    output += renderPageLine(page, baseUrl);
+    output += renderPageLine(page, baseUrl, summary);
   }
 
   if (unsectioned.length > 0 && sections.size > 0) output += "\n";
@@ -158,7 +166,7 @@ export function generateLlmsTxt(pages: PageResult[], config: AgentReadyConfig): 
     if (sectionPages.length === 0 && external.length === 0) continue;
 
     output += `## ${name}\n\n`;
-    for (const page of sectionPages) output += renderPageLine(page, baseUrl);
+    for (const page of sectionPages) output += renderPageLine(page, baseUrl, summary);
     for (const entry of external) output += renderEntryLine(entry, baseUrl);
     output += "\n";
   }

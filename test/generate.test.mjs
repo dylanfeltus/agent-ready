@@ -225,11 +225,39 @@ test("titles and descriptions cannot break the llms.txt list format", () => {
       description: "First line.\nSecond line.",
     },
   ];
-  const txt = generateLlmsTxt(awkward, {});
+  // An explicit summary keeps the entry's own description in play, so this
+  // stays a test of escaping rather than of summary de-duplication.
+  const txt = generateLlmsTxt(awkward, { description: "A distinct site summary." });
   const entries = txt.split("\n").filter((l) => l.startsWith("- "));
   assert.equal(entries.length, 1);
   // The whole description stays on the entry's own line.
   assert.match(entries[0], /First line\. Second line\./);
   // Brackets in the title are escaped so the link still parses.
   assert.match(entries[0], /\\\[v2\\\]/);
+});
+
+test("the site summary is not repeated as the entry it came from", () => {
+  const withDesc = [
+    {
+      url: "/",
+      path: "/index",
+      title: "Home",
+      markdown: "# Home",
+      description: "Event tracking for product teams.",
+    },
+    {
+      url: "/pricing",
+      path: "/pricing",
+      title: "Pricing",
+      markdown: "# Pricing",
+      description: "Free for 10k events.",
+    },
+  ];
+
+  const txt = generateLlmsTxt(withDesc, {});
+  assert.match(txt, /^> Event tracking for product teams\./m);
+  // The homepage entry carries no description, because it would be the summary.
+  assert.match(txt, /- \[Home\]\(\/index\.html\.md\)\n/);
+  // Other pages keep theirs.
+  assert.match(txt, /- \[Pricing\]\(\/pricing\.html\.md\): Free for 10k events\./);
 });

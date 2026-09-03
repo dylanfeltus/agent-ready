@@ -16,16 +16,16 @@ That's it. Zero config. You'll get:
 mysite.com-md/
 ├── llms.txt           # Index file per llmstxt.org spec
 ├── llms-ctx.txt       # All content inline (for single-prompt ingestion)
-├── index.html.md      # Homepage as markdown
+├── index.md           # Homepage as markdown
 ├── docs/
-│   ├── getting-started.html.md
-│   └── api-reference.html.md
+│   ├── getting-started.md
+│   └── api-reference.md
 └── blog/
-    ├── hello-world.html.md
-    └── release-notes.html.md
+    ├── hello-world.md
+    └── release-notes.md
 ```
 
-The doubled extension in `.html.md` is intentional — it's the [llmstxt.org](https://llmstxt.org) convention. A page's markdown mirror lives at that page's own URL with `.md` appended, so an agent that knows a URL can find its clean version without an index lookup.
+A page's markdown mirror lives at that page's own URL with `.md` appended, so an agent that knows a URL can find its clean version without an index lookup. The extension follows the source: a page served at `/docs/products` mirrors to `/docs/products.md`, while one served at `/guide.html` mirrors to `/guide.html.md`.
 
 ## What It Does
 
@@ -34,7 +34,7 @@ The doubled extension in `.html.md` is intentional — it's the [llmstxt.org](ht
 3. **Converts to markdown** — via [Turndown](https://github.com/mixmark-io/turndown)
 4. **Checks its own work** — warns when a page loses content in extraction
 5. **Generates `/llms.txt`** — per the [llmstxt.org](https://llmstxt.org) spec
-6. **Generates per-page `.html.md` files** — per the spec convention
+6. **Generates per-page `.md` files** — per the spec convention
 7. **Generates `/llms-ctx.txt`** — all content inline for single-prompt ingestion
 
 ## Install
@@ -179,6 +179,16 @@ export default {
   notes: ['Generated from the 2026-01 release.'],
 
   sections: {
+    // Guidance rather than links — how an agent should approach the site.
+    // This cannot be derived from crawled pages, and is often the most
+    // useful part of the file.
+    'How agents should use this site': {
+      bullets: [
+        'For research, fetch the Markdown pages below and follow their links.',
+        'Read the OpenAPI description before choosing an API operation.',
+      ],
+    },
+
     // A glob, or several
     'Documentation': '/docs/**',
     'Blog': ['/blog/**', '/changelog/**'],
@@ -192,6 +202,10 @@ export default {
       },
       { title: 'CLI', url: 'https://www.npmjs.com/package/@mysite/cli' },
     ],
+
+    // "Optional" has a defined meaning — content an agent may skip when short
+    // on context — so it is always emitted last, however it is declared.
+    'Optional': '/archive/**',
   },
 
   maxDepth: 3,
@@ -223,8 +237,8 @@ Per the [llmstxt.org spec](https://llmstxt.org):
 
 ## Documentation
 
-- [Getting Started](/docs/getting-started.html.md): Quick start guide
-- [API Reference](/docs/api-reference.html.md): Complete API docs
+- [Getting Started](/docs/getting-started.md): Quick start guide
+- [API Reference](/docs/api-reference.md): Complete API docs
 
 ## For agents and developers
 
@@ -233,9 +247,10 @@ Per the [llmstxt.org spec](https://llmstxt.org):
 
 With `--base-url`, every link above is absolute instead.
 
-### Per-page `.html.md`
+### Per-page `.md`
 
-Clean markdown extracted from each page — no nav, footer, ads, or scripts.
+Clean markdown extracted from each page — no nav, footer, ads, or scripts. The
+file lives at the page's own path with `.md` appended.
 
 ### `/llms-ctx.txt`
 
@@ -246,7 +261,7 @@ All page content concatenated in a single file for one-shot ingestion by AI agen
 [llms.txt](https://llmstxt.org) is a proposed standard (by Jeremy Howard) for making websites readable by AI agents. Think of it like `robots.txt` but for LLMs:
 
 - **`/llms.txt`** — A markdown index file listing your site's key pages with descriptions. AI agents read this first to understand what's on your site.
-- **`*.html.md`** — Clean markdown versions of each page (same URL + `.md`). No nav, no footer, no JavaScript — just the content.
+- **`*.md`** — Clean markdown versions of each page (same URL + `.md`). No nav, no footer, no JavaScript — just the content.
 - **`/llms-ctx.txt`** — All content concatenated in one file for single-prompt ingestion.
 
 Sites like [Anthropic](https://docs.anthropic.com/llms.txt), [Cloudflare](https://developers.cloudflare.com/llms.txt), and [Stripe](https://docs.stripe.com/llms.txt) already have `/llms.txt` files. `site-to-md` generates yours automatically.

@@ -2,14 +2,32 @@ import { matchesAnyGlob } from "./glob.js";
 import type {
   AgentReadyConfig,
   ExternalEntry,
+  GuidanceSection,
   PageResult,
   SectionSpec,
 } from "./types.js";
 
-/** The mirror path for a page, e.g. /pricing -> /pricing.html.md */
+/**
+ * The mirror path for a page: the page's own URL with `.md` appended.
+ *
+ * The extension comes from the source URL, not a fixed suffix — a page served
+ * at /docs/products mirrors to /docs/products.md, while one served at
+ * /guide.html mirrors to /guide.html.md. Always appending `.html.md` gave
+ * extensionless URLs — the common case on modern frameworks — a link that
+ * does not resolve.
+ */
 export function mirrorPath(page: PageResult): string {
-  if (page.path === "/" || page.path === "/index") return "/index.html.md";
-  return `${page.path}.html.md`;
+  let pathname = page.path;
+  try {
+    // page.url is absolute for a crawl and site-relative for a directory
+    // build; either way it still carries the original extension.
+    pathname = new URL(page.url, "http://localhost").pathname;
+  } catch { /* fall back to the normalised path */ }
+
+  if (pathname.endsWith("/")) pathname = pathname.slice(0, -1);
+  if (!pathname || pathname === "/index") pathname = "/index";
+
+  return `${pathname}.md`;
 }
 
 /**
@@ -47,14 +65,29 @@ export function sourceUrl(page: PageResult, baseUrl?: string): string {
   }
 }
 
+function isGuidance(spec: SectionSpec): spec is GuidanceSection {
+  return !Array.isArray(spec) && typeof spec === "object" && Array.isArray(spec.bullets);
+}
+
 function isExternalEntries(spec: SectionSpec): spec is ExternalEntry[] {
   return Array.isArray(spec) && typeof spec[0] === "object";
 }
 
 function globsOf(spec: SectionSpec): string[] {
   if (typeof spec === "string") return [spec];
-  if (isExternalEntries(spec)) return [];
+  if (isGuidance(spec) || isExternalEntries(spec)) return [];
   return spec as string[];
+}
+
+/** Pages that matched none of the configured section globs. */
+export function unsectionedPages(
+  pages: PageResult[],
+  config: AgentReadyConfig
+): PageResult[] {
+  if (!config.sections) return [];
+  const globs = Object.values(config.sections).flatMap(globsOf);
+  if (globs.length === 0) return [];
+  return pages.filter((page) => !matchesAnyGlob(page.path, globs));
 }
 
 /** Assign pages to sections based on config or auto-detect from URL structure */
@@ -158,14 +191,24 @@ export function generateLlmsTxt(pages: PageResult[], config: AgentReadyConfig): 
     ...[...sections.keys()].filter((name) => !declared.includes(name)),
   ];
 
+  // "Optional" has a defined meaning — content an agent may skip when short on
+  // context — so it belongs last however it was declared.
+  const isOptional = (name: string) => name.toLowerCase() === "optional";
+  ordered.sort((a, b) => Number(isOptional(a)) - Number(isOptional(b)));
+
   for (const name of ordered) {
     const spec = config.sections?.[name];
     const sectionPages = sections.get(name) || [];
     const external = spec && isExternalEntries(spec) ? spec : [];
+    const guidance = spec && isGuidance(spec) ? spec.bullets : [];
 
-    if (sectionPages.length === 0 && external.length === 0) continue;
+    if (sectionPages.length === 0 && external.length === 0 && guidance.length === 0) {
+      continue;
+    }
 
     output += `## ${name}\n\n`;
+    // Guidance is prose about the site, so it leads the section.
+    for (const bullet of guidance) output += `- ${oneLine(bullet)}\n`;
     for (const page of sectionPages) output += renderPageLine(page, baseUrl, summary);
     for (const entry of external) output += renderEntryLine(entry, baseUrl);
     output += "\n";

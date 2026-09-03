@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateLlmsTxt, generateLlmsCtx } from "../dist/generate.js";
+import { generateLlmsTxt, generateLlmsCtx, mirrorPath } from "../dist/generate.js";
 
 const pages = [
   {
@@ -27,15 +27,15 @@ const pages = [
 /** §2.1 — output is read from the publish origin, not the crawl origin. */
 test("2.1 baseUrl makes every emitted URL absolute", () => {
   const txt = generateLlmsTxt(pages, { baseUrl: "https://example.com" });
-  assert.match(txt, /\(https:\/\/example\.com\/index\.html\.md\)/);
-  assert.match(txt, /\(https:\/\/example\.com\/pricing\.html\.md\)/);
-  assert.match(txt, /\(https:\/\/example\.com\/docs\/start\.html\.md\)/);
+  assert.match(txt, /\(https:\/\/example\.com\/index\.md\)/);
+  assert.match(txt, /\(https:\/\/example\.com\/pricing\.md\)/);
+  assert.match(txt, /\(https:\/\/example\.com\/docs\/start\.md\)/);
   assert.doesNotMatch(txt, /localhost/);
 });
 
 test("2.1 without baseUrl, links stay site-relative as before", () => {
   const txt = generateLlmsTxt(pages, {});
-  assert.match(txt, /\(\/pricing\.html\.md\)/);
+  assert.match(txt, /\(\/pricing\.md\)/);
   assert.doesNotMatch(txt, /https:\/\/example\.com/);
 });
 
@@ -101,7 +101,7 @@ test("2.3 notes are rendered under the index", () => {
   assert.match(txt, /Built from the 2026-01 release\./);
   assert.match(txt, /Prices exclude tax\./);
   // Notes sit above the link list.
-  assert.ok(txt.indexOf("Prices exclude tax.") < txt.indexOf("](/index.html.md)"));
+  assert.ok(txt.indexOf("Prices exclude tax.") < txt.indexOf("](/index.md)"));
 });
 
 test("sections keep their declared order", () => {
@@ -257,7 +257,57 @@ test("the site summary is not repeated as the entry it came from", () => {
   const txt = generateLlmsTxt(withDesc, {});
   assert.match(txt, /^> Event tracking for product teams\./m);
   // The homepage entry carries no description, because it would be the summary.
-  assert.match(txt, /- \[Home\]\(\/index\.html\.md\)\n/);
+  assert.match(txt, /- \[Home\]\(\/index\.md\)\n/);
   // Other pages keep theirs.
-  assert.match(txt, /- \[Pricing\]\(\/pricing\.html\.md\): Free for 10k events\./);
+  assert.match(txt, /- \[Pricing\]\(\/pricing\.md\): Free for 10k events\./);
+});
+
+/**
+ * The mirror lives at the page's own URL plus `.md`. Real-world llms.txt
+ * files (e.g. Vercel's) link /docs/products.md for a page served at
+ * /docs/products; always appending `.html.md` produced a link that 404s.
+ */
+test("the mirror path takes its extension from the page URL", () => {
+  const cases = [
+    ["http://host/docs/products", "/docs/products", "/docs/products.md"],
+    ["http://host/guide.html", "/guide", "/guide.html.md"],
+    ["/index.html", "/index", "/index.html.md"],
+    ["http://host/", "/index", "/index.md"],
+  ];
+  for (const [url, path, expected] of cases) {
+    assert.equal(mirrorPath({ url, path, title: "", markdown: "" }), expected, url);
+  }
+});
+
+test("a section can hold guidance bullets rather than links", () => {
+  const txt = generateLlmsTxt(pages, {
+    sections: {
+      "How agents should use this": {
+        bullets: [
+          "Fetch the Markdown pages below and follow their links.",
+          "Read the OpenAPI description before choosing an operation.",
+        ],
+      },
+      Docs: "/docs/**",
+    },
+  });
+
+  assert.match(txt, /## How agents should use this/);
+  assert.match(txt, /- Fetch the Markdown pages below and follow their links\./);
+  assert.match(txt, /- Read the OpenAPI description before choosing an operation\./);
+  // Guidance sections are emitted even though no crawled page matches them.
+  assert.ok(txt.indexOf("## How agents should use this") < txt.indexOf("## Docs"));
+});
+
+test("an Optional section is emitted last whatever its declared order", () => {
+  const txt = generateLlmsTxt(pages, {
+    sections: {
+      Optional: "/pricing",
+      Docs: "/docs/**",
+    },
+  });
+  assert.ok(
+    txt.indexOf("## Docs") < txt.indexOf("## Optional"),
+    "Optional carries a defined meaning and belongs at the end"
+  );
 });

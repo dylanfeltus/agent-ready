@@ -211,13 +211,13 @@ test("1.4 the guard notices when a sparse table is pruned by extraction", async 
 });
 
 test("two pages writing to one mirror file are reported, not silently merged", async () => {
+  // Distinct pages whose paths differ only by query string share a mirror.
   const site = await serveFixtures({
     "/sitemap.xml": {
       type: "application/xml",
-      body: productionSitemap(["/guide", "/guide.html"]),
+      body: productionSitemap(["/search?q=alpha", "/search?q=beta"]),
     },
-    "/guide": { body: page({ title: "Guide", body: "<p>Extensionless guide body.</p>" }) },
-    "/guide.html": { body: page({ title: "Guide", body: "<p>Extensioned guide body.</p>" }) },
+    "/search": { body: page({ title: "Search", body: "<p>Search results body text.</p>" }) },
   });
 
   try {

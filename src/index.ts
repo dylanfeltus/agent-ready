@@ -2,7 +2,12 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import { crawlSite } from "./crawl.js";
 import { extractPage, extractLocalFile, type ExtractionReport } from "./extract.js";
-import { generateLlmsTxt, generateLlmsCtx, mirrorPath } from "./generate.js";
+import {
+  generateLlmsTxt,
+  generateLlmsCtx,
+  mirrorPath,
+  unsectionedPages,
+} from "./generate.js";
 import {
   Diagnostics,
   checkContentLoss,
@@ -357,6 +362,18 @@ export async function agentReady(config: AgentReadyConfig): Promise<GenerateResu
         );
       }
     } catch { /* malformed baseUrl — leave mirrors alone */ }
+  }
+
+  // A page matching no configured section is still listed, but above the first
+  // heading where it is easy to miss. Say so rather than let it hide there.
+  const unsectioned = unsectionedPages(pages, config);
+  if (unsectioned.length > 0) {
+    diagnostics.add({
+      level: "info",
+      code: "unsectioned-pages",
+      message: `${unsectioned.length} page${unsectioned.length !== 1 ? "s" : ""} matched no section and are listed before the first heading`,
+      detail: unsectioned.slice(0, 5).map((p) => p.path).join(", "),
+    });
   }
 
   // Generate output files

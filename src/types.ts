@@ -8,11 +8,20 @@ export interface ExternalEntry {
 }
 
 /**
- * A section is either path globs matching crawled pages, or literal entries
- * pointing anywhere. The most valuable lines in an llms.txt are often not on
- * the crawled site at all.
+ * A section of plain guidance rather than links — when to use this site, how
+ * an agent should approach it. Real-world llms.txt files lead with these, and
+ * they cannot be derived from crawled pages.
  */
-export type SectionSpec = string | string[] | ExternalEntry[];
+export interface GuidanceSection {
+  bullets: string[];
+}
+
+/**
+ * A section is either path globs matching crawled pages, literal entries
+ * pointing anywhere, or guidance bullets. The most valuable lines in an
+ * llms.txt are often not on the crawled site at all.
+ */
+export type SectionSpec = string | string[] | ExternalEntry[] | GuidanceSection;
 
 /** How to pick each page's title. */
 export type TitleSource = "auto" | "og" | "title";

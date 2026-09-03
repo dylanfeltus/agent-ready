@@ -1,6 +1,6 @@
 {
   "name": "site-to-md",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Make any website AI-agent-readable. Generates /llms.txt + clean markdown for every page.",
   "type": "module",
   "bin": {
@@ -19,7 +19,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test \"test/*.test.mjs\""
   },
   "keywords": [
     "llms.txt",
